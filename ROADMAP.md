@@ -177,6 +177,19 @@ P3 implementation notes:
 - Detection, sizing, RAM/VRAM estimates and a stub generate were verified
   end-to-end with a fake klein folder; the real-model run is P3.2.
 
+### P4 — Chat workspace & superapp shell
+
+- [ ] **P4.1 — Full chat tab.** Grow the LLM tab into a ChatGPT-class local tool
+  (persistent conversations, markdown/code blocks, stop/regenerate/edit, sampling
+  controls, context meter), then a tabbed **superapp** shell. Detailed phased
+  plan: [docs/chat-plan.md](docs/chat-plan.md).
+
+P3/UX notes:
+- Gallery reworked: the just-generated image is shown large in **full
+  resolution** (no upscaled thumbnail), with Copy-to-clipboard, a click-to-zoom
+  lightbox, **Show in folder** (`/api/images/{id}/reveal` opens the OS file
+  manager), PNG/JSON export, and a history strip of previous results.
+
 ---
 
 ## Done — M0 (GPU bring-up)

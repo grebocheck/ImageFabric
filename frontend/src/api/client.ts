@@ -52,6 +52,7 @@ export const api = {
     const params = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
     return fetch(`/api/images${params}`).then(j<ImageItem[]>);
   },
+  revealImage: (id: string) => fetch(`/api/images/${id}/reveal`, { method: "POST" }).then(j),
   listPresets: () => fetch("/api/presets").then(j<Preset[]>),
   createPreset: (name: string, type: JobType, params: Record<string, unknown>) =>
     fetch("/api/presets", {

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -44,6 +46,26 @@ async def image_metadata(image_id: str, session: AsyncSession = Depends(get_sess
         payload,
         headers={"Content-Disposition": f'attachment; filename="{image_id}.metadata.json"'},
     )
+
+
+@router.post("/{image_id}/reveal")
+async def reveal_image(image_id: str, session: AsyncSession = Depends(get_session)) -> dict:
+    """Open the OS file manager with the image file selected. Local-app
+    convenience — the browser cannot reach the desktop file manager itself."""
+    img = await gallery_service.get_image(session, image_id)
+    if not img or not Path(img.path).exists():
+        raise HTTPException(404, "image not found")
+    path = Path(img.path)
+    try:
+        if sys.platform == "win32":
+            subprocess.Popen(["explorer", f"/select,{path}"])
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", "-R", str(path)])
+        else:
+            subprocess.Popen(["xdg-open", str(path.parent)])
+    except OSError as exc:  # pragma: no cover - desktop-only path
+        raise HTTPException(500, f"could not open file manager: {exc}")
+    return {"revealed": str(path)}
 
 
 @router.get("/{image_id}/thumb")
