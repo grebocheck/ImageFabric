@@ -342,6 +342,7 @@ function numberParam(value: unknown, fallback: number): number {
 }
 
 function imageModelRank(model: Model): number {
+  if (model.family === "flux2") return 0;
   if (model.family === "flux" && isNunchaku(model)) return 0;
   if (!model.slow) return 1;
   return 2;

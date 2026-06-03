@@ -152,6 +152,31 @@ numbers and invariants. To close M1, run with `IMGFAB_STUB_MODE=false` and captu
 - [ ] **M1.5** — Quality A/B captured (`python scripts\quality_ab.py`): nunchaku
   fp4 vs int4 vs GGUF fallback.
 
+### P3 — FLUX.2 [klein] (new model family)
+
+- [x] **P3.1 — FLUX.2 [klein] via diffusers + bitsandbytes 4-bit.** Added a new
+  `ModelFamily.FLUX2`. klein uses a small **Qwen3** text encoder (not FLUX.2
+  [dev]'s 24 GB Mistral), so 9B in bnb-nf4 + model-offload fits 16 GB. Loaded
+  with diffusers' `Flux2KleinPipeline` (already in our diffusers 0.38) — we do
+  **not** use nunchaku here because its FLUX.2 transformer is still unreleased
+  (PR #926). FLUX.2 [dev] (32B + Mistral-24B) is intentionally out of scope.
+- [ ] **P3.2 — Live GPU validation.** Needs the model downloaded + a real run to
+  confirm VRAM/RAM/speed and tune `flux2_default_steps`/`guidance`.
+- [ ] **P3.3 — nunchaku FLUX.2 fast path.** Once nunchaku ships
+  `NunchakuFlux2Transformer2DModel`, add an SVDQuant fp4 path (Blackwell) for a
+  ~3× speedup, mirroring the existing FLUX.1 nunchaku loader.
+
+P3 implementation notes:
+- **To enable:** drop the klein repo into a *folder* under `models/image/` (it
+  is multi-file, not a single `.safetensors`); it is auto-detected by its
+  `model_index.json`. Example:
+  `huggingface-cli download black-forest-labs/FLUX.2-klein-9B --local-dir models/image/flux2-klein-9b`.
+- Knobs: `IMGFAB_FLUX2_QUANT` (`bnb-nf4`|`bnb-fp4`|`none`),
+  `IMGFAB_FLUX2_OFFLOAD` (`model`|`sequential`|`none`),
+  `IMGFAB_FLUX2_DEFAULT_STEPS` (6), `IMGFAB_FLUX2_DEFAULT_GUIDANCE` (4.0).
+- Detection, sizing, RAM/VRAM estimates and a stub generate were verified
+  end-to-end with a fake klein folder; the real-model run is P3.2.
+
 ---
 
 ## Done — M0 (GPU bring-up)

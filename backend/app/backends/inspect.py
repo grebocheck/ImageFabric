@@ -42,6 +42,20 @@ def classify_image_model(path: Path) -> ModelFamily:
         return ModelFamily.UNKNOWN
 
 
+def is_flux2_dir(path: Path) -> bool:
+    """FLUX.2 [klein] ships as a multi-file diffusers repo (not a single
+    .safetensors), so we detect it by a ``model_index.json`` whose pipeline
+    class is a Flux2 variant."""
+    index = path / "model_index.json"
+    if not index.is_file():
+        return False
+    try:
+        data = json.loads(index.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    return "Flux2" in str(data.get("_class_name", ""))
+
+
 def classify_lora_model(path: Path) -> ModelFamily | None:
     text = " ".join(part.lower() for part in path.parts[-5:])
     if "flux" in text:

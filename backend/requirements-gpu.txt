@@ -49,5 +49,17 @@ bitsandbytes>=0.49             # 4-bit path (Blackwell sm_120 supported)
 # - Regular SDXL/FLUX LoRAs go in models/lora (or IMGFAB_LORA_MODELS_DIR) and
 #   are selected per job through params.loras / the composer UI.
 
+# --- FLUX.2 [klein]: diffusers-native bitsandbytes 4-bit (P3) ---
+# klein uses a small Qwen3 text encoder (not FLUX.2 [dev]'s 24 GB Mistral), so
+# 9B in 4-bit + offload fits 16 GB. It loads via diffusers' Flux2KleinPipeline
+# (already in diffusers 0.38) + bitsandbytes (already pinned above) — NO extra
+# package. nunchaku has no FLUX.2 transformer yet (PR #926), so there is no
+# SVDQuant fast path for FLUX.2 until that ships.
+#   huggingface-cli download black-forest-labs/FLUX.2-klein-9B \
+#     --local-dir models/image/flux2-klein-9b
+# Drop it as a FOLDER (multi-file repo); ImageFabric auto-detects it by its
+# model_index.json. Knobs: IMGFAB_FLUX2_QUANT / _OFFLOAD / _DEFAULT_STEPS /
+# _DEFAULT_GUIDANCE. FLUX.2 [dev] (32B + Mistral-24B) is intentionally unsupported.
+
 # LLM (llama.cpp): we run the `llama-server` binary as a subprocess.
 # No python package required — place a CUDA(sm_120) build under bin/llama/.

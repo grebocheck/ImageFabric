@@ -4,6 +4,7 @@ export type View = "images" | "llm";
 
 const familyColor: Record<string, string> = {
   flux: "bg-violet-600",
+  flux2: "bg-sky-600",
   sdxl: "bg-pink-600",
   gguf: "bg-emerald-600",
 };

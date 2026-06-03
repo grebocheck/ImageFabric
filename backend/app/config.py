@@ -63,6 +63,19 @@ class Settings(BaseSettings):
     # and avoids reading the local 16 GB fp8 file just to borrow its encoders).
     flux_t5_nunchaku: str = "nunchaku-tech/nunchaku-t5/awq-int4-flux.1-t5xxl.safetensors"
 
+    # --- FLUX.2 [klein] (diffusers-native, bitsandbytes 4-bit) ---
+    # nunchaku does not ship a FLUX.2 transformer yet (PR pending), so the klein
+    # path uses diffusers' Flux2KleinPipeline directly. klein uses a small Qwen3
+    # text encoder (not FLUX.2 [dev]'s 24 GB Mistral), so 9B in 4-bit + offload
+    # fits 16 GB. Drop the klein repo into a FOLDER under models/image/ (it is
+    # multi-file, not a single .safetensors); it is auto-detected by its
+    # model_index.json. FLUX.2 [dev] (32B + Mistral-24B) is intentionally NOT
+    # supported — it blows the RAM/VRAM budget.
+    flux2_quant: str = "bnb-nf4"          # bnb-nf4 | bnb-fp4 | none (bf16)
+    flux2_offload: str = "model"          # model | sequential | none
+    flux2_default_steps: int = 6          # klein is distilled -> few steps
+    flux2_default_guidance: float = 4.0
+
     # --- image acceleration ---
     # P1.1: Opt-in compile because Blackwell compile can spike RAM/VRAM during
     # graph capture. When enabled, the backend records before/after memory in

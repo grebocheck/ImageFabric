@@ -14,7 +14,7 @@ from ..config import settings
 from ..core.enums import ModelFamily
 from .base import GpuBackend, LoraDescriptor, ModelDescriptor
 from .image_diffusers import DiffusersImageBackend
-from .inspect import classify_image_model, classify_lora_model
+from .inspect import classify_image_model, classify_lora_model, is_flux2_dir
 from .llm_llamacpp import LlamaCppBackend
 
 LORA_EXTENSIONS = {".safetensors", ".pt", ".bin"}
@@ -48,6 +48,10 @@ class ModelRegistry:
                 self._add(path, ModelFamily.FLUX, quant=_nunchaku_quant(name))
             else:
                 self._add(path, classify_image_model(path))
+        # FLUX.2 [klein] is a multi-file diffusers repo dropped in as a folder.
+        for sub in sorted(p for p in settings.image_models_dir.iterdir() if p.is_dir()):
+            if is_flux2_dir(sub):
+                self._add(sub, ModelFamily.FLUX2, quant=settings.flux2_quant)
         for path in sorted(settings.llm_models_dir.glob("*.gguf")):
             self._add(path, ModelFamily.GGUF)
         for root in self._lora_scan_roots():
@@ -71,12 +75,20 @@ class ModelRegistry:
                 seen.add(resolved)
         return deduped
 
+    @staticmethod
+    def _path_size(path: Path) -> int:
+        if path.is_dir():
+            return sum(
+                f.stat().st_size for f in path.rglob("*.safetensors") if f.is_file()
+            )
+        try:
+            return path.stat().st_size
+        except OSError:
+            return 0
+
     def _add(self, path, family: ModelFamily, quant: str | None = None) -> None:
         mid = _slug(path.stem)
-        try:
-            size = path.stat().st_size
-        except OSError:
-            size = 0
+        size = self._path_size(path)
         self._descriptors[mid] = ModelDescriptor(
             id=mid, name=path.stem, family=family, path=path, size_bytes=size, quant=quant
         )

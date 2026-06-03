@@ -1,6 +1,6 @@
 export type JobType = "llm" | "image";
 export type JobStatus = "queued" | "running" | "done" | "error" | "cancelled";
-export type ModelFamily = "flux" | "sdxl" | "gguf" | "unknown";
+export type ModelFamily = "flux" | "flux2" | "sdxl" | "gguf" | "unknown";
 
 export interface Model {
   id: string;

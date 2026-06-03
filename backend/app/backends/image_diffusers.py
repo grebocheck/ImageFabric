@@ -75,7 +75,9 @@ class DiffusersImageBackend(ImageBackend):
             "memory": {"start": self._memory_snapshot(torch)},
         }
 
-        if self._is_nunchaku_quant():
+        if self.descriptor.family is ModelFamily.FLUX2:
+            pipe = self._load_flux2_klein(torch)
+        elif self._is_nunchaku_quant():
             pipe = self._load_nunchaku_flux(torch)
         elif self.descriptor.family is ModelFamily.FLUX:
             from diffusers import FluxPipeline  # noqa: PLC0415
@@ -140,6 +142,49 @@ class DiffusersImageBackend(ImageBackend):
         )
         pipe.vae.enable_tiling()
         pipe.enable_model_cpu_offload()
+        return pipe
+
+    def _load_flux2_klein(self, torch) -> Any:
+        """FLUX.2 [klein] via diffusers (nunchaku has no FLUX.2 transformer yet).
+
+        klein's text encoder is a small Qwen3 (not FLUX.2 [dev]'s 24 GB Mistral),
+        so the 9B model in bitsandbytes 4-bit + model-offload fits a 16 GB card.
+        The model is a multi-file repo folder under models/image/."""
+        from diffusers import Flux2KleinPipeline  # noqa: PLC0415
+
+        source = str(self.descriptor.path)
+        kwargs: dict[str, Any] = {"torch_dtype": torch.bfloat16}
+
+        quant = settings.flux2_quant.lower().strip()
+        if quant in ("bnb-nf4", "bnb-fp4"):
+            from diffusers import PipelineQuantizationConfig  # noqa: PLC0415
+
+            kwargs["quantization_config"] = PipelineQuantizationConfig(
+                quant_backend="bitsandbytes_4bit",
+                quant_kwargs={
+                    "load_in_4bit": True,
+                    "bnb_4bit_quant_type": "nf4" if quant == "bnb-nf4" else "fp4",
+                    "bnb_4bit_compute_dtype": torch.bfloat16,
+                },
+                components_to_quantize=["transformer", "text_encoder"],
+            )
+        elif quant not in ("", "none", "bf16"):
+            raise ValueError(
+                "IMGFAB_FLUX2_QUANT must be one of: bnb-nf4, bnb-fp4, none "
+                f"(got {settings.flux2_quant!r})"
+            )
+
+        pipe = Flux2KleinPipeline.from_pretrained(source, **kwargs)
+        if hasattr(getattr(pipe, "vae", None), "enable_tiling"):
+            pipe.vae.enable_tiling()
+
+        offload = settings.flux2_offload.lower().strip()
+        if offload == "sequential":
+            pipe.enable_sequential_cpu_offload()
+        elif offload in ("", "none"):
+            pipe.to("cuda")
+        else:  # "model" (default): encoders idle in RAM, frugal VRAM
+            pipe.enable_model_cpu_offload()
         return pipe
 
     def _is_nunchaku_quant(self) -> bool:
@@ -469,15 +514,21 @@ class DiffusersImageBackend(ImageBackend):
 
     def _steps(self, params: dict[str, Any]) -> int:
         steps = int(params.get("steps", settings.default_steps))
+        untouched = "steps" not in params or steps == settings.default_steps
+        if self.descriptor.family is ModelFamily.FLUX2 and untouched:
+            return settings.flux2_default_steps
         if self._active_features.get("sdxl_turbo_lora") and params.get("turbo", True):
-            if "steps" not in params or steps == settings.default_steps:
+            if untouched:
                 return settings.sdxl_turbo_steps
         return steps
 
     def _guidance(self, params: dict[str, Any]) -> float:
         guidance = float(params.get("guidance", settings.default_guidance))
+        untouched = "guidance" not in params or guidance == settings.default_guidance
+        if self.descriptor.family is ModelFamily.FLUX2 and untouched:
+            return settings.flux2_default_guidance
         if self._active_features.get("sdxl_turbo_lora") and params.get("turbo", True):
-            if "guidance" not in params or guidance == settings.default_guidance:
+            if untouched:
                 return settings.sdxl_turbo_guidance
         return guidance
 

@@ -20,6 +20,7 @@ class JobStatus(str, Enum):
 
 class ModelFamily(str, Enum):
     FLUX = "flux"
+    FLUX2 = "flux2"
     SDXL = "sdxl"
     GGUF = "gguf"
     UNKNOWN = "unknown"
