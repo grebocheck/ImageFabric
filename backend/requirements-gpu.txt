@@ -10,16 +10,24 @@
 #   python -c "import torch; print(torch.__version__, torch.cuda.get_device_capability())"
 #   # expect capability (12, 0) for Blackwell
 
-diffusers>=0.32
-transformers>=4.48
-accelerate>=1.2
+# Pinned/verified on RTX 5070 Ti (Blackwell, torch 2.11.0+cu128) in M0:
+diffusers==0.38.0
+transformers>=4.49,<5          # IMPORTANT: transformers 5.x removed CLIPTextModel.text_model
+                               # which diffusers 0.38 single-file loaders rely on.
+accelerate>=1.13
 safetensors>=0.4.5
-sentencepiece>=0.2.0          # T5 tokenizer for FLUX
+sentencepiece>=0.2.0           # T5 tokenizer for FLUX
 protobuf>=5.0
+bitsandbytes>=0.49             # 4-bit path (Blackwell sm_120 supported)
 
-# Acceleration (optional, added incrementally in M4):
+# FLUX note (M0 finding): the local flux_dev.safetensors is an fp8 ComfyUI
+# all-in-one checkpoint. diffusers needs a (non-gated) config to assemble the
+# pipeline -> we use IMGFAB_FLUX_CONFIG_REPO (default ChuckMcSneed/FLUX.1-dev).
+# fp8 weights can't run fast in 16 GB via layerwise casting (it materializes
+# bf16 ~24 GB). A fast FLUX needs 4-bit or true fp8 GEMM -> M4:
+# nunchaku                     # SVDQuant int4/fp4 FLUX turbo (Blackwell-native)
+# torchao                      # true fp8 GEMM (keeps weights fp8, ~12 GB)
 # xformers / flash-attn        # fp8 attention on Blackwell
-# nunchaku                     # SVDQuant int4/fp4 FLUX turbo mode
 
 # LLM (llama.cpp): we run the `llama-server` binary as a subprocess.
 # No python package required — place a CUDA(sm_120) build under bin/llama/.

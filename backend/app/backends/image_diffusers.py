@@ -40,22 +40,49 @@ class DiffusersImageBackend(ImageBackend):
         self._loaded = True
 
     def _load_pipeline_sync(self) -> None:
+        # Loaders verified on RTX 5070 Ti (Blackwell) in M0.
+        import os  # noqa: PLC0415
+        import re  # noqa: PLC0415
+
         import torch  # noqa: PLC0415  (lazy: only when GPU mode is on)
+
+        os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
         if self.descriptor.family is ModelFamily.FLUX:
             from diffusers import FluxPipeline  # noqa: PLC0415
 
+            # The local file is an fp8 ComfyUI all-in-one checkpoint. Load it
+            # *keeping fp8* (loading as bf16 would balloon to ~24 GB and OOM the
+            # CPU during conversion). A non-gated config repo supplies the
+            # pipeline config + tokenizers; weights come from the local file.
             pipe = FluxPipeline.from_single_file(
-                str(self.descriptor.path), torch_dtype=torch.bfloat16
+                str(self.descriptor.path),
+                config=settings.flux_config_repo,
+                torch_dtype=torch.float8_e4m3fn,
             )
-            pipe.enable_model_cpu_offload()  # frugal VRAM for the 16 GB checkpoint
-        else:  # SDXL
+            # Keep the big linears fp8 in VRAM, upcast per-layer to bf16 for
+            # compute (Forge-style). NOTE (M0): this still materializes bf16 and
+            # is slow / memory-heavy at 1024 on 16 GB — a fast FLUX needs a 4-bit
+            # model (Nunchaku/GGUF) or true fp8 GEMM (torchao). Tracked for M4.
+            pipe.transformer.enable_layerwise_casting(
+                storage_dtype=torch.float8_e4m3fn, compute_dtype=torch.bfloat16
+            )
+            skip = re.compile(r"pos_embed|patch_embed|norm")
+            for name, mod in pipe.transformer.named_modules():
+                if skip.search(name) or name.split(".")[-1] in ("proj_in", "proj_out"):
+                    mod.to(torch.bfloat16)
+            pipe.text_encoder.to(torch.bfloat16)
+            pipe.text_encoder_2.to(torch.bfloat16)
+            pipe.vae.to(torch.bfloat16)
+            pipe.vae.enable_tiling()
+            pipe.enable_model_cpu_offload()  # frugal VRAM: encoders idle in RAM
+        else:  # SDXL — fits fully in 16 GB, keep resident & fast (~5 s / image)
             from diffusers import StableDiffusionXLPipeline  # noqa: PLC0415
 
             pipe = StableDiffusionXLPipeline.from_single_file(
                 str(self.descriptor.path), torch_dtype=torch.float16
             )
-            pipe = pipe.to("cuda")  # fits fully, keep it resident & fast
+            pipe = pipe.to("cuda")
         self._pipe = pipe
 
     # --------------------------------------------------------------- unload

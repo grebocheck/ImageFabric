@@ -10,7 +10,11 @@
       "Bash(npm install *)",
       "Bash(npm run *)",
       "Bash(git init *)",
-      "Bash(git config *)"
+      "Bash(git config *)",
+      "Bash(/d/VSCode/ImageFabric/.venv/Scripts/python.exe -c \"from app.backends.registry import ModelRegistry; r=ModelRegistry\\(\\); r.scan\\(\\); print\\([\\(d.id, d.family.value\\) for d in r.descriptors\\(\\)]\\)\")",
+      "Bash(nvidia-smi)",
+      "Bash(./.venv/Scripts/python.exe -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128)",
+      "Bash(./.venv/Scripts/python.exe -m pip install -r backend/requirements-gpu.txt)"
     ]
   }
 }

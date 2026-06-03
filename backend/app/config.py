@@ -49,9 +49,15 @@ class Settings(BaseSettings):
     llama_server_bin: Path = ROOT / "bin" / "llama" / "llama-server.exe"
     llama_host: str = "127.0.0.1"
     llama_port: int = 8261
-    # Default launch knobs (tunable per-model later). -1 ngl = offload all layers.
-    llama_ngl: int = -1
+    # Default launch knobs (tunable per-model later). 999 = offload all layers.
+    llama_ngl: int = 999
     llama_ctx: int = 8192
+
+    # --- FLUX loading (M0 finding) ---
+    # The local flux_dev is an fp8 all-in-one checkpoint; diffusers needs a
+    # (non-gated) repo to assemble the pipeline config + tokenizers. Weights
+    # still come from the local file.
+    flux_config_repo: str = "ChuckMcSneed/FLUX.1-dev"
 
     # --- image generation defaults ---
     default_steps: int = 28
