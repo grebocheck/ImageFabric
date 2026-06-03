@@ -40,3 +40,22 @@ def classify_image_model(path: Path) -> ModelFamily:
         return ModelFamily.FLUX if path.stat().st_size > 10 * 1024**3 else ModelFamily.SDXL
     except OSError:
         return ModelFamily.UNKNOWN
+
+
+def classify_lora_model(path: Path) -> ModelFamily | None:
+    text = " ".join(part.lower() for part in path.parts[-5:])
+    if "flux" in text:
+        return ModelFamily.FLUX
+    if "sdxl" in text or "sd_xl" in text or "noobai" in text:
+        return ModelFamily.SDXL
+
+    try:
+        keys = _read_safetensors_keys(path, probe_limit=1024)
+    except Exception:
+        return None
+    joined = "\n".join(keys).lower()
+    if "single_transformer_blocks" in joined or "double_blocks" in joined or ".transformer." in joined:
+        return ModelFamily.FLUX
+    if "lora_unet" in joined or ".unet." in joined or "conditioner.embedders" in joined:
+        return ModelFamily.SDXL
+    return None

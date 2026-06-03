@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..backends.base import ModelDescriptor
 from ..backends.registry import ModelRegistry
 from ..core.enums import EventType, JobStatus, JobType
 from ..core.events import EventBus
@@ -18,7 +21,7 @@ from .deps import get_bus, get_registry, get_session, get_worker
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
-def _validate_model(registry: ModelRegistry, payload: JobCreate) -> None:
+def _validate_model(registry: ModelRegistry, payload: JobCreate) -> ModelDescriptor:
     try:
         desc = registry.get_descriptor(payload.model_id)
     except KeyError:
@@ -27,6 +30,54 @@ def _validate_model(registry: ModelRegistry, payload: JobCreate) -> None:
         raise HTTPException(
             400, f"model '{desc.id}' is {desc.job_type.value}, not {payload.type.value}"
         )
+    return desc
+
+
+def _normalize_loras(registry: ModelRegistry, desc: ModelDescriptor, payload: JobCreate) -> None:
+    raw = payload.params.get("loras")
+    if payload.type is not JobType.IMAGE or not raw:
+        return
+    if not isinstance(raw, list):
+        raise HTTPException(400, "params.loras must be a list")
+
+    public_loras: list[dict[str, Any]] = []
+    for item in raw:
+        if isinstance(item, str):
+            lora_id = item
+            weight = 1.0
+        elif isinstance(item, dict):
+            lora_id = item.get("id")
+            weight = item.get("weight", 1.0)
+        else:
+            raise HTTPException(400, "each LoRA must be an id string or object")
+        if not isinstance(lora_id, str) or not lora_id:
+            raise HTTPException(400, "each LoRA needs an id")
+        try:
+            weight = float(weight)
+        except (TypeError, ValueError):
+            raise HTTPException(400, f"invalid LoRA weight for {lora_id!r}")
+        if weight < -2.0 or weight > 2.0:
+            raise HTTPException(400, f"LoRA weight for {lora_id!r} must be between -2 and 2")
+        try:
+            lora = registry.get_lora(lora_id)
+        except KeyError:
+            raise HTTPException(404, f"unknown LoRA id: {lora_id}")
+        if lora.family is not None and desc.family is not lora.family:
+            raise HTTPException(
+                400,
+                f"LoRA '{lora.name}' targets {lora.family.value}, "
+                f"but model '{desc.name}' is {desc.family.value}",
+            )
+        public_loras.append({
+            "id": lora.id,
+            "name": lora.name,
+            "family": lora.family.value if lora.family else None,
+            "weight": weight,
+        })
+
+    params = dict(payload.params)
+    params["loras"] = public_loras
+    payload.params = params
 
 
 @router.post("", response_model=list[JobOut])
@@ -42,7 +93,8 @@ async def create_jobs(
         raise HTTPException(400, "no jobs provided")
     created = []
     for payload in payloads:
-        _validate_model(registry, payload)
+        desc = _validate_model(registry, payload)
+        _normalize_loras(registry, desc, payload)
         job = await queue_service.create_job(session, payload)
         created.append(job)
     await session.commit()

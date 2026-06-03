@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     root: Path = ROOT
     image_models_dir: Path = ROOT / "models" / "image"
     llm_models_dir: Path = ROOT / "models" / "llm"
+    lora_models_dir: Path = ROOT / "models" / "lora"
     data_dir: Path = ROOT / "data"
     outputs_dir: Path = ROOT / "data" / "outputs"
     db_path: Path = ROOT / "data" / "imagefabric.db"
@@ -62,6 +63,42 @@ class Settings(BaseSettings):
     # and avoids reading the local 16 GB fp8 file just to borrow its encoders).
     flux_t5_nunchaku: str = "nunchaku-tech/nunchaku-t5/awq-int4-flux.1-t5xxl.safetensors"
 
+    # --- image acceleration ---
+    # P1.1: Opt-in compile because Blackwell compile can spike RAM/VRAM during
+    # graph capture. When enabled, the backend records before/after memory in
+    # the model.loaded event and does a tiny warmup pass.
+    torch_compile: bool = False
+    torch_compile_mode: str = "max-autotune"
+    torch_compile_warmup: bool = True
+    torch_compile_warmup_size: int = 512
+    # P1.2: Nunchaku first-block cache for FLUX. "fb" is the native adapter in
+    # nunchaku; "teacache" wraps each generation with TeaCache; "off" disables.
+    flux_step_cache: str = "fb"
+    flux_fb_cache_threshold: float = 0.12
+    flux_fb_cache_double: bool = False
+    flux_teacache_threshold: float = 0.6
+    flux_teacache_skip_steps: int = 0
+    # P2.2: PyTorch scaled-dot-product attention backend selector. "auto" lets
+    # PyTorch choose; "flash", "efficient", "math", and "cudnn" force a native
+    # SDPA backend when the installed torch build exposes it.
+    attention_backend: str = "auto"
+    attention_allow_tf32: bool = True
+    attention_matmul_precision: str = "high"
+    # P1.4: Optional SDXL turbo LoRA. Set to a local .safetensors file, local
+    # folder, or Hugging Face repo id to make SDXL default to low-step turbo mode.
+    sdxl_turbo_lora: str | None = None
+    sdxl_turbo_lora_weight: float = 1.0
+    sdxl_turbo_steps: int = 6
+    sdxl_turbo_guidance: float = 1.0
+
+    # --- optional keep-warm policy (P2.1) ---
+    # OFF by default. When enabled, the arbiter may park one image pipeline in
+    # CPU RAM between swaps instead of fully deleting it. It is still not a VRAM
+    # resident, and the RAM guard below decides whether parking is allowed.
+    keep_warm_models: bool = False
+    keep_warm_max_models: int = 1
+    keep_warm_min_available_ram_gb: float = 10.0
+
     # --- memory budget (protect the SSD from pagefile writes) ---
     # Refuse a load if it would leave less than this much free RAM.
     min_free_ram_gb: float = 2.5
@@ -79,7 +116,7 @@ class Settings(BaseSettings):
         return f"sqlite+aiosqlite:///{self.db_path.as_posix()}"
 
     def ensure_dirs(self) -> None:
-        for d in (self.data_dir, self.outputs_dir):
+        for d in (self.data_dir, self.outputs_dir, self.lora_models_dir):
             d.mkdir(parents=True, exist_ok=True)
 
 

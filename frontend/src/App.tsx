@@ -5,26 +5,33 @@ import { Composer } from "./components/Composer";
 import { Gallery } from "./components/Gallery";
 import { ModelStatus } from "./components/ModelStatus";
 import { QueuePanel } from "./components/QueuePanel";
-import type { BusEvent, GpuStatus, ImageItem, Job, Model } from "./types";
+import { SettingsPanel } from "./components/SettingsPanel";
+import type { BusEvent, GpuStatus, ImageItem, Job, Lora, Model, Preset } from "./types";
 
 export default function App() {
   const [models, setModels] = useState<Model[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [images, setImages] = useState<ImageItem[]>([]);
-  const [gpu, setGpu] = useState<GpuStatus>({ resident: null, model_id: null, model: null, family: null });
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const [loras, setLoras] = useState<Lora[]>([]);
+  const [gpu, setGpu] = useState<GpuStatus>({ resident: null, model_id: null, model: null, family: null, warm: [] });
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [promptDraft, setPromptDraft] = useState("");
   const [expanding, setExpanding] = useState(false);
   const expandJobId = useRef<string | null>(null);
 
   const refreshJobs = useCallback(() => api.listJobs().then(setJobs).catch(() => {}), []);
-  const refreshImages = useCallback(() => api.listImages().then(setImages).catch(() => {}), []);
+  const refreshImages = useCallback((q?: string) => api.listImages(q).then(setImages).catch(() => {}), []);
+  const refreshPresets = useCallback(() => api.listPresets().then(setPresets).catch(() => {}), []);
 
   useEffect(() => {
     api.listModels().then(setModels).catch(() => {});
+    api.listLoras().then(setLoras).catch(() => {});
     refreshJobs();
     refreshImages();
-  }, [refreshJobs, refreshImages]);
+    refreshPresets();
+  }, [refreshJobs, refreshImages, refreshPresets]);
 
   const onEvent = useCallback(
     (e: BusEvent) => {
@@ -35,11 +42,20 @@ export default function App() {
             model_id: (e.model_id as string) ?? null,
             model: (e.model as string) ?? null,
             family: (e.family as string) ?? null,
+            warm: Array.isArray(e.warm) ? (e.warm as GpuStatus["warm"]) : [],
           });
           break;
         case "job.progress":
           setJobs((prev) =>
-            prev.map((j) => (j.id === e.job_id ? { ...j, progress: e.progress as number } : j)),
+            prev.map((j) => (
+              j.id === e.job_id
+                ? {
+                    ...j,
+                    progress: e.progress as number,
+                    progress_note: typeof e.note === "string" ? e.note : j.progress_note,
+                  }
+                : j
+            )),
           );
           break;
         case "llm.token":
@@ -85,11 +101,14 @@ export default function App() {
 
   return (
     <div className="flex h-screen flex-col">
-      <ModelStatus gpu={gpu} connected={connected} onFree={onFree} />
+      <ModelStatus gpu={gpu} connected={connected} onFree={onFree} onSettings={() => setSettingsOpen(true)} />
       <main className="grid flex-1 grid-cols-[380px_320px_1fr] gap-4 overflow-hidden p-4">
         <div className="overflow-y-auto">
           <Composer
             models={models}
+            loras={loras}
+            presets={presets}
+            onPresetsChanged={refreshPresets}
             promptDraft={promptDraft}
             setPromptDraft={setPromptDraft}
             expanding={expanding}
@@ -97,8 +116,9 @@ export default function App() {
           />
         </div>
         <QueuePanel jobs={jobs} onChanged={refreshJobs} />
-        <Gallery images={images} />
+        <Gallery images={images} onSearch={refreshImages} />
       </main>
+      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 }

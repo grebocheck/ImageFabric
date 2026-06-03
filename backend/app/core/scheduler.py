@@ -133,7 +133,7 @@ class Worker:
 
             if snap.type is JobType.IMAGE:
                 assert isinstance(backend, ImageBackend)
-                records = await backend.generate(snap.params, progress)
+                records = await backend.generate(self._with_lora_paths(snap.params), progress)
                 await self._finish_image(snap, records)
             else:
                 assert isinstance(backend, LLMBackend)
@@ -146,6 +146,20 @@ class Worker:
 
         except Exception as exc:  # noqa: BLE001
             await self._fail(snap, repr(exc))
+
+    def _with_lora_paths(self, params: dict[str, Any]) -> dict[str, Any]:
+        raw_loras = params.get("loras") or []
+        if not isinstance(raw_loras, list) or not raw_loras:
+            return params
+        lora_paths: dict[str, str] = {}
+        for item in raw_loras:
+            if not isinstance(item, dict) or not isinstance(item.get("id"), str):
+                continue
+            lora = self._registry.get_lora(item["id"])
+            lora_paths[lora.id] = str(lora.path)
+        if not lora_paths:
+            return params
+        return {**params, "_lora_paths": lora_paths}
 
     async def _finish_image(self, snap: JobSnapshot, records: list[dict[str, Any]]) -> None:
         image_ids: list[str] = []

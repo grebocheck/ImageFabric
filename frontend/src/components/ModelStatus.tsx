@@ -10,10 +10,12 @@ export function ModelStatus({
   gpu,
   connected,
   onFree,
+  onSettings,
 }: {
   gpu: GpuStatus;
   connected: boolean;
   onFree: () => void;
+  onSettings: () => void;
 }) {
   return (
     <header className="flex items-center justify-between border-b border-white/10 px-5 py-3">
@@ -41,12 +43,29 @@ export function ModelStatus({
         ) : (
           <span className="text-white/40">— idle —</span>
         )}
+        {gpu.warm?.length ? (
+          <span className="flex items-center gap-1 text-xs text-white/45">
+            <span>CPU warm:</span>
+            <span
+              className="max-w-44 truncate font-mono text-white/60"
+              title={gpu.warm.map((m) => m.model).join(", ")}
+            >
+              {gpu.warm.map((m) => m.model).join(", ")}
+            </span>
+          </span>
+        ) : null}
         <button
           onClick={onFree}
-          disabled={!gpu.model}
+          disabled={!gpu.model && !gpu.warm?.length}
           className="rounded border border-white/15 px-2.5 py-1 text-xs hover:bg-white/10 disabled:opacity-30"
         >
           Free GPU
+        </button>
+        <button
+          onClick={onSettings}
+          className="rounded border border-white/15 px-2.5 py-1 text-xs hover:bg-white/10"
+        >
+          Settings
         </button>
       </div>
     </header>

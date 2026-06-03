@@ -37,12 +37,23 @@ class ModelDescriptor:
         return self.family.job_type
 
 
+@dataclass(frozen=True)
+class LoraDescriptor:
+    id: str
+    name: str
+    path: Path
+    size_bytes: int
+    family: ModelFamily | None = None
+
+
 class GpuBackend(abc.ABC):
     """Common lifecycle for anything that occupies VRAM."""
 
     def __init__(self, descriptor: ModelDescriptor) -> None:
         self.descriptor = descriptor
         self._loaded = False
+        self._warm = False
+        self._load_report: dict[str, Any] | None = None
 
     @property
     def resident_key(self) -> str:
@@ -52,11 +63,27 @@ class GpuBackend(abc.ABC):
     def loaded(self) -> bool:
         return self._loaded
 
+    @property
+    def warm(self) -> bool:
+        return self._warm
+
+    @property
+    def can_keep_warm(self) -> bool:
+        return False
+
+    @property
+    def load_report(self) -> dict[str, Any] | None:
+        return self._load_report
+
     @abc.abstractmethod
     async def load(self) -> None: ...
 
     @abc.abstractmethod
     async def unload(self) -> None: ...
+
+    async def park(self) -> bool:
+        """Move out of VRAM but keep CPU state warm. Default: unsupported."""
+        return False
 
 
 class ImageBackend(GpuBackend):

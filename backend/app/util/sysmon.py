@@ -62,14 +62,32 @@ def snapshot() -> dict:
     return {"ram": ram_stats(), "vram": vram_stats()}
 
 
+def _is_nunchaku_quant(quant: str | None) -> bool:
+    return bool(quant and quant.startswith("nunchaku"))
+
+
 def estimate_ram_need_gb(family: ModelFamily, size_bytes: int, quant: str | None) -> float:
     """Rough CPU-RAM a load will need, by model kind."""
     gb = size_bytes / _GB
     if family is ModelFamily.GGUF:
         return 2.0  # llama-server mmaps the gguf (disk-backed) -> low RSS
-    if quant == "nunchaku":
+    if _is_nunchaku_quant(quant):
         return gb + 4.0  # + the int4 T5 (~3 GB) and headroom
     return gb * 1.3  # diffusers single-file materialization overhead
+
+
+def estimate_vram_need_gb(family: ModelFamily, size_bytes: int, quant: str | None) -> float | None:
+    """Rough resident VRAM estimate shown in the UI before the user queues work."""
+    gb = size_bytes / _GB
+    if family is ModelFamily.FLUX and _is_nunchaku_quant(quant):
+        return 9.8  # M0 measured SVDQuant fp4 on RTX 5070 Ti
+    if family is ModelFamily.FLUX:
+        return max(16.0, round(gb, 1))  # raw fp8 path can overflow 16 GB cards
+    if family is ModelFamily.SDXL:
+        return round(min(12.5, max(8.0, gb * 1.65)), 1)
+    if family is ModelFamily.GGUF:
+        return round(max(2.0, gb + 0.75), 1)  # full offload: weights + context/KV
+    return None
 
 
 def check_ram_budget(family: ModelFamily, size_bytes: int, quant: str | None) -> None:
@@ -84,3 +102,21 @@ def check_ram_budget(family: ModelFamily, size_bytes: int, quant: str | None) ->
             f"is available. Free some memory or pick a lighter model — refusing to "
             f"load rather than risk pagefile thrashing."
         )
+
+
+def can_keep_warm(family: ModelFamily, size_bytes: int, quant: str | None) -> tuple[bool, str]:
+    """Return whether parking a model in CPU RAM keeps enough free headroom."""
+    need = estimate_ram_need_gb(family, size_bytes, quant)
+    available = ram_stats()["available_gb"]
+    required = need + settings.keep_warm_min_available_ram_gb
+    if available < required:
+        return (
+            False,
+            f"parking would need ~{need:.1f} GB RAM plus "
+            f"{settings.keep_warm_min_available_ram_gb:.1f} GB keep-warm headroom, "
+            f"but only {available:.1f} GB is available",
+        )
+    return True, (
+        f"parking allowed: needs ~{need:.1f} GB RAM, "
+        f"{available:.1f} GB available"
+    )

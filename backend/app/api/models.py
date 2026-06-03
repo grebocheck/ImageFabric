@@ -5,9 +5,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 
 from ..backends.registry import ModelRegistry
+from ..config import settings
 from ..core.arbiter import GpuArbiter
 from ..core.enums import ModelFamily
-from ..schemas import GpuStatusOut, ModelOut
+from ..schemas import GpuStatusOut, LoraOut, ModelOut
+from ..util import sysmon
 from .deps import get_arbiter, get_registry
 
 router = APIRouter(prefix="/api", tags=["models"])
@@ -22,13 +24,71 @@ async def list_models(
     out: list[ModelOut] = []
     for d in registry.descriptors():
         loaded = current is not None and current.descriptor.id == d.id
+        existing = registry.peek_backend(d.id)
+        warm = bool(existing and existing.warm)
         # raw fp8 FLUX (no quant backend) is the slow / high-mem path on 16 GB
         slow = d.family is ModelFamily.FLUX and d.quant is None
         out.append(ModelOut(
             id=d.id, name=d.name, family=d.family, job_type=d.job_type,
-            size_bytes=d.size_bytes, loaded=loaded, quant=d.quant, slow=slow,
+            size_bytes=d.size_bytes, loaded=loaded, warm=warm, quant=d.quant,
+            estimated_vram_gb=sysmon.estimate_vram_need_gb(d.family, d.size_bytes, d.quant),
+            slow=slow,
         ))
     return out
+
+
+@router.get("/loras", response_model=list[LoraOut])
+async def list_loras(
+    family: ModelFamily | None = None,
+    registry: ModelRegistry = Depends(get_registry),
+) -> list[LoraOut]:
+    return [
+        LoraOut(id=l.id, name=l.name, family=l.family, size_bytes=l.size_bytes)
+        for l in registry.loras(family)
+    ]
+
+
+@router.get("/settings")
+async def runtime_settings(
+    registry: ModelRegistry = Depends(get_registry),
+    arbiter: GpuArbiter = Depends(get_arbiter),
+) -> dict:
+    descriptors = registry.descriptors()
+    return {
+        "stub_mode": settings.stub_mode,
+        "paths": {
+            "image_models_dir": str(settings.image_models_dir),
+            "lora_models_dir": str(settings.lora_models_dir),
+            "llm_models_dir": str(settings.llm_models_dir),
+            "outputs_dir": str(settings.outputs_dir),
+            "db_path": str(settings.db_path),
+            "llama_server_bin": str(settings.llama_server_bin),
+        },
+        "memory": {
+            "min_free_ram_gb": settings.min_free_ram_gb,
+            "keep_warm_models": settings.keep_warm_models,
+            "keep_warm_max_models": settings.keep_warm_max_models,
+            "keep_warm_min_available_ram_gb": settings.keep_warm_min_available_ram_gb,
+            "mem_poll_seconds": settings.mem_poll_seconds,
+        },
+        "acceleration": {
+            "attention_backend": settings.attention_backend,
+            "attention_allow_tf32": settings.attention_allow_tf32,
+            "attention_matmul_precision": settings.attention_matmul_precision,
+            "torch_compile": settings.torch_compile,
+            "torch_compile_mode": settings.torch_compile_mode,
+            "flux_step_cache": settings.flux_step_cache,
+            "sdxl_turbo_lora": settings.sdxl_turbo_lora,
+        },
+        "counts": {
+            "models": len(descriptors),
+            "image_models": sum(1 for d in descriptors if d.job_type.value == "image"),
+            "llm_models": sum(1 for d in descriptors if d.job_type.value == "llm"),
+            "loras": len(registry.loras()),
+        },
+        "gpu": arbiter.status(),
+        "mem": sysmon.snapshot(),
+    }
 
 
 @router.get("/gpu", response_model=GpuStatusOut)

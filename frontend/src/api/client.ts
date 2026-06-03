@@ -1,4 +1,4 @@
-import type { ImageItem, Job, JobCreate, Model } from "../types";
+import type { ImageItem, Job, JobCreate, JobType, Lora, Model, Preset, RuntimeSettings } from "../types";
 
 async function j<T>(res: Response): Promise<T> {
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
@@ -7,6 +7,8 @@ async function j<T>(res: Response): Promise<T> {
 
 export const api = {
   listModels: () => fetch("/api/models").then(j<Model[]>),
+  listLoras: () => fetch("/api/loras").then(j<Lora[]>),
+  runtimeSettings: () => fetch("/api/settings").then(j<RuntimeSettings>),
   gpuStatus: () => fetch("/api/gpu").then(j),
   freeGpu: () => fetch("/api/gpu/free", { method: "POST" }).then(j),
 
@@ -32,5 +34,16 @@ export const api = {
     }).then(j<Job>),
   clearFinished: () => fetch("/api/jobs/clear", { method: "POST" }).then(j),
 
-  listImages: () => fetch("/api/images").then(j<ImageItem[]>),
+  listImages: (q?: string) => {
+    const params = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
+    return fetch(`/api/images${params}`).then(j<ImageItem[]>);
+  },
+  listPresets: () => fetch("/api/presets").then(j<Preset[]>),
+  createPreset: (name: string, type: JobType, params: Record<string, unknown>) =>
+    fetch("/api/presets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, type, params }),
+    }).then(j<Preset>),
+  deletePreset: (id: string) => fetch(`/api/presets/${id}`, { method: "DELETE" }).then(j),
 };

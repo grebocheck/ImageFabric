@@ -1,9 +1,9 @@
 """LLM backend that drives a `llama-server` subprocess (llama.cpp).
 
 Running it as a separate process is deliberate: when we need VRAM for image
-generation we simply *kill* the process, which frees VRAM **and** RAM instantly
-and completely — the cleanest possible swap. ``load`` starts the server and waits
-for ``/health``; ``unload`` terminates it.
+generation we terminate the server process, which releases llama.cpp's VRAM
+completely. ``load`` starts the server and waits for ``/health``; ``unload``
+terminates it, escalating to kill only if shutdown hangs.
 
 STUB mode simulates a streamed completion (a deterministic prompt expansion) so
 the LLM->image phase pipeline works without a real model or binary.

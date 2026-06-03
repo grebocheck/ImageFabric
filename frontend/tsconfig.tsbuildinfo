@@ -1,1 +1,1 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/types.ts","./src/api/client.ts","./src/api/useevents.ts","./src/components/composer.tsx","./src/components/gallery.tsx","./src/components/modelstatus.tsx","./src/components/queuepanel.tsx"],"version":"5.9.3"}
+{"root":["./src/app.tsx","./src/main.tsx","./src/types.ts","./src/api/client.ts","./src/api/useevents.ts","./src/components/composer.tsx","./src/components/gallery.tsx","./src/components/modelstatus.tsx","./src/components/queuepanel.tsx","./src/components/settingspanel.tsx"],"version":"5.9.3"}

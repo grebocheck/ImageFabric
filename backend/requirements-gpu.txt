@@ -33,9 +33,21 @@ bitsandbytes>=0.49             # 4-bit path (Blackwell sm_120 supported)
 # 2) Put the fp4 model in models/image/:
 #    huggingface-cli download nunchaku-tech/nunchaku-flux.1-dev \
 #      svdq-fp4_r32-flux.1-dev.safetensors --local-dir models/image
-#    (T5/CLIP/VAE are reused from the local flux_dev.safetensors automatically.)
+#    (T5 uses nunchaku-tech/nunchaku-t5; CLIP/VAE/tokenizers come from
+#     IMGFAB_FLUX_CONFIG_REPO, so the local 16 GB fp8 checkpoint is not read.)
 
-# Further acceleration (later): torch.compile, TeaCache, fp8 attention.
+# Acceleration knobs in code:
+# - IMGFAB_FLUX_STEP_CACHE=fb enables nunchaku first-block cache by default.
+# - IMGFAB_FLUX_STEP_CACHE=teacache enables nunchaku TeaCache per generation.
+# - IMGFAB_ATTENTION_BACKEND=auto|flash|efficient|math|cudnn selects a PyTorch
+#   native SDPA backend when available. External flash-attn/xformers are optional
+#   and are only reported, not required by default.
+# - IMGFAB_TORCH_COMPILE=true wraps the FLUX transformer in torch.compile and
+#   emits a model.loaded load_report with RAM/VRAM before/after warmup.
+# - IMGFAB_SDXL_TURBO_LORA=<path-or-repo> loads an SDXL DMD2/Lightning-style
+#   LoRA and swaps untouched defaults to low-step turbo settings.
+# - Regular SDXL/FLUX LoRAs go in models/lora (or IMGFAB_LORA_MODELS_DIR) and
+#   are selected per job through params.loras / the composer UI.
 
 # LLM (llama.cpp): we run the `llama-server` binary as a subprocess.
 # No python package required — place a CUDA(sm_120) build under bin/llama/.
