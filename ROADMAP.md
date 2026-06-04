@@ -199,8 +199,12 @@ P3 implementation notes:
   `IMGFAB_FLUX2_DEFAULT_STEPS` (6), `IMGFAB_FLUX2_DEFAULT_GUIDANCE` (4.0).
 - Detection, sizing, RAM/VRAM estimates and a stub generate were verified
   end-to-end with a fake klein folder; the real-model run is P3.2.
-- 2026-06-04 live check: `models/image` contains only `.cache` as a folder, so
-  the real `FLUX.2-klein-9B` multi-file repo is not downloaded yet.
+- 2026-06-04: the klein transformer is downloaded as a **single-file**
+  `flux-2-klein-9b.safetensors` (transformer-only, BF16, FLUX.2 modulation keys).
+  Detection now recognizes FLUX.2 by the `double_stream_modulation` keys, and the
+  loader handles both a single-file (transformer via `from_single_file` + 4-bit;
+  Qwen3 text encoder / VAE / tokenizer pulled from `IMGFAB_FLUX2_KLEIN_REPO`) and
+  a full repo folder. Real-GPU generation run is still P3.2.
 
 ### P4 — Chat workspace & superapp shell
 

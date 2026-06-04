@@ -31,6 +31,10 @@ def classify_image_model(path: Path) -> ModelFamily:
         return ModelFamily.UNKNOWN
 
     joined = "\n".join(keys)
+    # FLUX.2 uses a new modulation scheme (double_stream_modulation_*) on top of
+    # the double/single block layout — check it first to tell klein from FLUX.1.
+    if "double_stream_modulation" in joined or "single_stream_modulation" in joined:
+        return ModelFamily.FLUX2
     if "double_blocks" in joined or "single_blocks" in joined:
         return ModelFamily.FLUX
     if "input_blocks" in joined or "conditioner.embedders" in joined:

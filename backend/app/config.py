@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     flux2_offload: str = "model"          # model | sequential | none
     flux2_default_steps: int = 6          # klein is distilled -> few steps
     flux2_default_guidance: float = 4.0
+    # When a single-file klein transformer is used, the text encoder (Qwen3), VAE,
+    # tokenizer and config come from this (license-gated) repo.
+    flux2_klein_repo: str = "black-forest-labs/FLUX.2-klein-9B"
 
     # --- image acceleration ---
     # P1.1: Opt-in compile because Blackwell compile can spike RAM/VRAM during

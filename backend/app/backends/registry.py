@@ -47,7 +47,9 @@ class ModelRegistry:
                 # SVDQuant transformer-only checkpoint (Blackwell fp4/int4 turbo)
                 self._add(path, ModelFamily.FLUX, quant=_nunchaku_quant(name))
             else:
-                self._add(path, classify_image_model(path))
+                fam = classify_image_model(path)
+                quant = settings.flux2_quant if fam is ModelFamily.FLUX2 else None
+                self._add(path, fam, quant=quant)
         # FLUX.2 [klein] is a multi-file diffusers repo dropped in as a folder.
         for sub in sorted(p for p in settings.image_models_dir.iterdir() if p.is_dir()):
             if is_flux2_dir(sub):

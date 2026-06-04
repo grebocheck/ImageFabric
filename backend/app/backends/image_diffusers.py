@@ -149,32 +149,59 @@ class DiffusersImageBackend(ImageBackend):
 
         klein's text encoder is a small Qwen3 (not FLUX.2 [dev]'s 24 GB Mistral),
         so the 9B model in bitsandbytes 4-bit + model-offload fits a 16 GB card.
-        The model is a multi-file repo folder under models/image/."""
+        Supports two layouts:
+          * a multi-file diffusers repo folder under models/image/, or
+          * a single-file transformer checkpoint (then the Qwen3 text encoder,
+            VAE, tokenizer and scheduler come from IMGFAB_FLUX2_KLEIN_REPO)."""
         from diffusers import Flux2KleinPipeline  # noqa: PLC0415
 
-        source = str(self.descriptor.path)
-        kwargs: dict[str, Any] = {"torch_dtype": torch.bfloat16}
-
+        path = self.descriptor.path
         quant = settings.flux2_quant.lower().strip()
-        if quant in ("bnb-nf4", "bnb-fp4"):
-            from diffusers import PipelineQuantizationConfig  # noqa: PLC0415
-
-            kwargs["quantization_config"] = PipelineQuantizationConfig(
-                quant_backend="bitsandbytes_4bit",
-                quant_kwargs={
-                    "load_in_4bit": True,
-                    "bnb_4bit_quant_type": "nf4" if quant == "bnb-nf4" else "fp4",
-                    "bnb_4bit_compute_dtype": torch.bfloat16,
-                },
-                components_to_quantize=["transformer", "text_encoder"],
-            )
-        elif quant not in ("", "none", "bf16"):
+        if quant not in ("bnb-nf4", "bnb-fp4", "", "none", "bf16"):
             raise ValueError(
                 "IMGFAB_FLUX2_QUANT must be one of: bnb-nf4, bnb-fp4, none "
                 f"(got {settings.flux2_quant!r})"
             )
+        use_bnb = quant in ("bnb-nf4", "bnb-fp4")
+        qtype = "nf4" if quant == "bnb-nf4" else "fp4"
 
-        pipe = Flux2KleinPipeline.from_pretrained(source, **kwargs)
+        def _pipe_quant(components: list[str]):
+            from diffusers import PipelineQuantizationConfig  # noqa: PLC0415
+
+            return PipelineQuantizationConfig(
+                quant_backend="bitsandbytes_4bit",
+                quant_kwargs={
+                    "load_in_4bit": True,
+                    "bnb_4bit_quant_type": qtype,
+                    "bnb_4bit_compute_dtype": torch.bfloat16,
+                },
+                components_to_quantize=components,
+            )
+
+        if path.is_dir():
+            kwargs: dict[str, Any] = {"torch_dtype": torch.bfloat16}
+            if use_bnb:
+                kwargs["quantization_config"] = _pipe_quant(["transformer", "text_encoder"])
+            pipe = Flux2KleinPipeline.from_pretrained(str(path), **kwargs)
+        else:
+            # single-file transformer: 4-bit it, borrow the rest from the repo
+            from diffusers import Flux2Transformer2DModel  # noqa: PLC0415
+
+            tkwargs: dict[str, Any] = {"torch_dtype": torch.bfloat16}
+            if use_bnb:
+                from diffusers import BitsAndBytesConfig as DBnb  # noqa: PLC0415
+
+                tkwargs["quantization_config"] = DBnb(
+                    load_in_4bit=True,
+                    bnb_4bit_quant_type=qtype,
+                    bnb_4bit_compute_dtype=torch.bfloat16,
+                )
+            transformer = Flux2Transformer2DModel.from_single_file(str(path), **tkwargs)
+            kwargs = {"transformer": transformer, "torch_dtype": torch.bfloat16}
+            if use_bnb:
+                kwargs["quantization_config"] = _pipe_quant(["text_encoder"])
+            pipe = Flux2KleinPipeline.from_pretrained(settings.flux2_klein_repo, **kwargs)
+
         if hasattr(getattr(pipe, "vae", None), "enable_tiling"):
             pipe.vae.enable_tiling()
 
