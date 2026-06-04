@@ -53,7 +53,7 @@ export function QueuePanel({ jobs, onChanged }: { jobs: Job[]; onChanged: () => 
   };
 
   return (
-    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-white/10 bg-[#101219] max-[1240px]:col-span-2 max-[860px]:h-[520px]">
+    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-white/10 bg-surface max-[1240px]:col-span-2 max-[860px]:h-[520px]">
       <div className="border-b border-white/10 px-3 py-3">
         <div className="flex items-start justify-between gap-3">
           <div>

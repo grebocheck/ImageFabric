@@ -235,7 +235,7 @@ export function ImageComposer({
   const queueLabel = count > 1 ? `Queue ${count} jobs` : "Queue generation";
 
   return (
-    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-white/10 bg-[#101219] max-[860px]:mb-4 max-[860px]:h-[760px]">
+    <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-white/10 bg-surface max-[860px]:mb-4 max-[860px]:h-[760px]">
       <div className="border-b border-white/10 px-3 py-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">

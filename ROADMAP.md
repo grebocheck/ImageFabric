@@ -356,11 +356,13 @@ P3/UX notes:
   "H") shipped 2026-06-04 as [Logo.tsx](frontend/src/components/Logo.tsx) in the
   header lockup, plus a matching [favicon.svg](frontend/public/favicon.svg).
   *Remaining:* a packaged desktop/window icon for the VS Code-extension shell.
-- [ ] **P5.A2 — Design tokens.** Centralize the palette (surfaces, borders, text,
-  one **accent** color, success/warn/error) as CSS variables / Tailwind 4
-  `@theme` tokens in [index.css](frontend/src/index.css), replacing the ad-hoc
-  hex literals (`#0b0d12`, `#e6e8ef`, …) scattered across components. Consistent
-  radii, elevation, and visible focus rings for keyboard users.
+- [x] **P5.A2 — Design tokens (foundation).** Shipped 2026-06-04: Tailwind 4
+  `@theme` tokens in [index.css](frontend/src/index.css) — `base` / `surface` /
+  `surface-2` / `fg` / `accent` (+ hover) — replacing every ad-hoc hex literal
+  (`#0b0d12`, `#e6e8ef`, `bg-[#101219]`, `bg-[#12151c]`). Added a keyboard-only
+  `:focus-visible` accent ring and accent `::selection`. *Remaining:* migrate the
+  scattered `violet-*` utilities to the `accent` token (one-knob theming for
+  P5.A3) and add radii/elevation tokens + success/warn/error colors.
 - [ ] **P5.A3 — Theme toggle (optional).** Light/dim/dark variants driven by the
   same tokens, persisted to `localStorage` next to `hfabric.view`.
 

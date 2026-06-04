@@ -65,7 +65,7 @@ export function ResultPreview({ images, onOpenHistory }: { images: ImageItem[]; 
     : [];
 
   return (
-    <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-white/10 bg-[#101219] max-[860px]:mb-4 max-[860px]:h-[720px]">
+    <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-lg border border-white/10 bg-surface max-[860px]:mb-4 max-[860px]:h-[720px]">
       <div className="flex items-center justify-between gap-3 border-b border-white/10 px-3 py-3">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-white/85">Result</h2>

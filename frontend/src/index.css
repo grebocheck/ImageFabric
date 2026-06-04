@@ -1,12 +1,35 @@
 @import "tailwindcss";
 
+/* Design tokens (P5.A2). Tailwind 4 turns these into utilities — e.g.
+   --color-surface -> bg-surface / text-surface / border-surface. Centralizing
+   them here means a theme toggle (P5.A3) can later flip one place. */
+@theme {
+  --color-base: #0b0d12;        /* page background */
+  --color-surface: #101219;     /* panels / cards */
+  --color-surface-2: #12151c;   /* raised: dropdowns, popovers */
+  --color-fg: #e6e8ef;          /* primary text */
+  --color-accent: #7c3aed;      /* violet-600 — matches the brand mark */
+  --color-accent-hover: #8b5cf6;
+}
+
 :root {
   color-scheme: dark;
 }
 
 body {
   margin: 0;
-  background: #0b0d12;
-  color: #e6e8ef;
+  background: var(--color-base);
+  color: var(--color-fg);
   font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+}
+
+@layer base {
+  /* Keyboard-only focus ring in the accent colour (mouse clicks stay clean). */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent) 45%, transparent);
+  }
 }

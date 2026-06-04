@@ -89,7 +89,7 @@ export function Select({
       </button>
 
       {open && (
-        <div className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-white/10 bg-[#12151c] py-1 shadow-xl shadow-black/60">
+        <div className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-white/10 bg-surface-2 py-1 shadow-xl shadow-black/60">
           {options.length === 0 ? <div className="px-2.5 py-1.5 text-sm text-white/30">no options</div> : null}
           {options.map((o, i) => (
             <button
