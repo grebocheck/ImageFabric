@@ -17,21 +17,19 @@ already does the LLM↔image swap). New workspaces plug in the same way. The DB
 
 ---
 
-## Phase C1 — Make it feel like a real chat (highest value)
+## Phase C1 — Make it feel like a real chat (highest value) ✅ SHIPPED 2026-06-04
 
-- **C1.1 Persistent conversations.** New SQLite tables `conversation` and
-  `message`; CRUD endpoints (`/api/chat/conversations`, `.../messages`). The chat
-  job writes the assistant reply back to the conversation. Survives restart.
-- **C1.2 Conversation sidebar.** List / new / rename / delete / search past
-  chats; auto-title from the first user turn (or a tiny LLM summarization call).
-- **C1.3 Markdown + code blocks.** Render assistant output as GitHub-flavored
-  markdown (`react-markdown` + `remark-gfm`) with syntax highlighting and a
-  per-code-block **Copy** button. Copy-message and copy-conversation too.
-- **C1.4 Stop / regenerate / edit.** Stop button cancels the running LLM job
-  mid-stream (reuse `DELETE /api/jobs/{id}`); regenerate last answer; edit an
-  earlier user message and re-run from that point (truncate + resend).
-- **C1.5 Context meter.** Live token/char count and a "X / n_ctx" usage bar so
-  you can see when you're about to overflow the window.
+- [x] **C1.1 Persistent conversations.** SQLite `conversation`/`message` tables +
+  CRUD (`/api/chat/conversations`, `.../messages`). The worker writes the reply
+  back into the assistant message; conversations survive restart.
+- [x] **C1.2 Conversation sidebar.** New / select / delete; auto-title from the
+  first user turn. *(search across chats: later.)*
+- [x] **C1.3 Markdown + code blocks.** `react-markdown` + `remark-gfm` +
+  `rehype-highlight`, per-code-block and per-message **Copy**.
+- [x] **C1.4 Stop / regenerate / edit.** Stop interrupts the running stream
+  (`/api/llm/stop` flag); regenerate last answer; edit a user message and re-run
+  (truncate-from + resend).
+- [x] **C1.5 Context meter.** Live `~tokens / n_ctx` readout in the composer.
 
 ## Phase C2 — Model & sampling control
 

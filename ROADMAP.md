@@ -179,10 +179,11 @@ P3 implementation notes:
 
 ### P4 — Chat workspace & superapp shell
 
-- [ ] **P4.1 — Full chat tab.** Grow the LLM tab into a ChatGPT-class local tool
-  (persistent conversations, markdown/code blocks, stop/regenerate/edit, sampling
-  controls, context meter), then a tabbed **superapp** shell. Detailed phased
-  plan: [docs/chat-plan.md](docs/chat-plan.md).
+- [x] **P4.1 — Chat C1 (real chat tab).** Persistent conversations, sidebar,
+  markdown + code blocks with copy, stop/regenerate/edit, per-conversation model
+  settings, context meter. Shipped 2026-06-04.
+- [ ] **P4.2 — Chat C2+ (sampling UI, personas, vision, RAG, tools, superapp
+  shell).** Per the phased plan: [docs/chat-plan.md](docs/chat-plan.md).
 
 P3/UX notes:
 - Gallery reworked: the just-generated image is shown large in **full
