@@ -42,6 +42,14 @@ IMAGE_TOOL_SYSTEM = (
     "Use the tool only when generation is useful; otherwise answer normally."
 )
 
+DOCUMENT_TOOL_SYSTEM = (
+    "You can call one local tool when the user's question may need indexed local "
+    "documents. If local document search would help, reply with only this JSON "
+    "object and no markdown: "
+    '{"tool":"search_documents","query":"concise search query","top_k":5}. '
+    "Use the tool only when retrieval is useful; otherwise answer normally."
+)
+
 
 def _require_job_type(registry: ModelRegistry, model_id: str, job_type: JobType) -> None:
     try:
@@ -196,6 +204,8 @@ async def send_message(
         msgs.append({"role": "system", "content": system})
     if body.image_tool:
         msgs.append({"role": "system", "content": IMAGE_TOOL_SYSTEM})
+    if body.document_tool:
+        msgs.append({"role": "system", "content": DOCUMENT_TOOL_SYSTEM})
     msgs.extend({"role": m.role, "content": m.content} for m in history)
 
     # empty assistant message the worker will fill in as it streams
@@ -219,6 +229,12 @@ async def send_message(
             "conversation_id": conv_id,
             "assistant_message_id": assistant_msg.id,
         }
+    if body.document_tool:
+        params["document_tool"] = {
+            "conversation_id": conv_id,
+            "assistant_message_id": assistant_msg.id,
+            "top_k": max(1, min(20, int(body.rag_top_k or 5))),
+        }
 
     job = await queue_service.create_job(
         session, JobCreate(type=JobType.LLM, model_id=body.model_id, params=params)
@@ -234,6 +250,7 @@ async def send_message(
         "max_tokens": body.max_tokens,
         **{k: getattr(body, k) for k in ("top_p", "top_k", "min_p", "repeat_penalty", "stop") if getattr(body, k) is not None},
         **({"image_tool": True, "image_model_id": body.image_model_id} if body.image_tool else {}),
+        **({"document_tool": True, "rag_top_k": max(1, min(20, int(body.rag_top_k or 5)))} if body.document_tool else {}),
     }
     await chat_service.touch(session, conv_id)
     await session.commit()

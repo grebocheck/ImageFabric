@@ -82,6 +82,14 @@ Env vars (prefix `IMGFAB_`, or a `.env` file in repo root). Highlights:
 | `IMGFAB_LLAMA_NGL` | `999` | GPU layers to offload (999 = full offload). |
 | `IMGFAB_LLAMA_CTX` | `8192` | llama.cpp context size. |
 | `IMGFAB_LORA_MODELS_DIR` | `models/lora` | Local SDXL/FLUX LoRA files. |
+| `IMGFAB_TTS_MODELS_DIR` | `models/tts` | Local llama-tts GGUF voice/acoustic models. |
+| `IMGFAB_TRANSCRIPTION_MODELS_DIR` | `models/transcribe` | Local Whisper model folders or `.pt` files. |
+| `IMGFAB_TRANSCRIPTION_DEVICE` | `cpu` | Transcription device; CPU-first so it does not bypass the GPU arbiter by default. |
+| `IMGFAB_EMBED_MODELS_DIR` | `models/embed` | Local GGUF embedding models for RAG. |
+| `IMGFAB_EMBED_GPU_LAYERS` | `0` | GPU layers for the RAG embedding server; CPU-only by default. |
+| `IMGFAB_VISION_MODELS_DIR` | `models/vision` | Local multimodal GGUF + mmproj files. |
+| `IMGFAB_LLAMA_MTMD_BIN` | `bin/llama/llama-mtmd-cli.exe` | llama.cpp multimodal CLI. |
+| `IMGFAB_VISION_GPU_LAYERS` | `0` | GPU layers for vision analysis; CPU-only by default. |
 | `IMGFAB_FLUX_STEP_CACHE` | `fb` | FLUX acceleration: `fb`, `teacache`, or `off`. |
 | `IMGFAB_ATTENTION_BACKEND` | `auto` | PyTorch SDPA selector: `auto`, `flash`, `efficient`, `math`, or `cudnn`. |
 | `IMGFAB_TORCH_COMPILE` | `false` | Compile FLUX transformer and run a warmup pass. |
@@ -138,6 +146,41 @@ files on startup, exposes them at `/api/loras`, and validates queued
 `params.loras` against the selected image model. The composer filters compatible
 LoRAs and stores only public `{id,name,family,weight}` metadata in jobs/presets;
 local file paths are resolved by the worker right before generation.
+
+### Speech workspaces
+
+The TTS tab scans `models/tts` for local `.gguf` files and calls
+`bin/llama/llama-tts.exe`. It defaults to `IMGFAB_TTS_GPU_LAYERS=0`, so speech
+generation stays CPU-only unless explicitly changed.
+
+The Transcribe tab is similarly gated. `/api/transcription/status` reports local
+Whisper engines (`faster-whisper` or `openai-whisper`) and scans
+`models/transcribe` for model folders/files. `/api/transcription/transcribe`
+accepts an audio upload only when both an engine and a local model are present;
+it writes transcript metadata under `data/outputs/<date>/`.
+
+The Vision tab scans `models/vision` for a local multimodal GGUF and `mmproj`
+pair, then calls `bin/llama/llama-mtmd-cli.exe` for PNG/JPEG analysis. It
+defaults to `IMGFAB_VISION_GPU_LAYERS=0`, and stores JSON result sidecars under
+`data/outputs/<date>/`.
+
+### RAG workspace
+
+The RAG tab scans `models/embed` for local GGUF embedding models and starts a
+dedicated `llama-server` on `IMGFAB_LLAMA_EMBED_PORT` (default 8262) in
+`--embeddings` mode on first use. `IMGFAB_EMBED_GPU_LAYERS=0` keeps it CPU-only
+by default, so document indexing/search does not take VRAM from the shared
+arbiter.
+
+Indexed documents are chunked into SQLite `rag_documents` / `rag_chunks` rows
+with normalized embedding vectors. Search returns top chunks by cosine score,
+and the RAG tab can create an LLM conversation with the retrieved context
+inserted into the user turn.
+
+The LLM chat tab also has a **Document tool** toggle. When enabled, the model may
+emit a structured `search_documents` call; ImageFabric runs local RAG search,
+then queues a child LLM turn with the retrieved context so the final response
+streams into the same assistant message.
 
 ### History, export, settings
 

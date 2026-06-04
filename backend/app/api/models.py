@@ -61,10 +61,14 @@ async def runtime_settings(
             "lora_models_dir": str(settings.lora_models_dir),
             "llm_models_dir": str(settings.llm_models_dir),
             "tts_models_dir": str(settings.tts_models_dir),
+            "transcription_models_dir": str(settings.transcription_models_dir),
+            "embed_models_dir": str(settings.embed_models_dir),
+            "vision_models_dir": str(settings.vision_models_dir),
             "outputs_dir": str(settings.outputs_dir),
             "db_path": str(settings.db_path),
             "llama_server_bin": str(settings.llama_server_bin),
             "llama_tts_bin": str(settings.llama_tts_bin),
+            "llama_mtmd_bin": str(settings.llama_mtmd_bin),
         },
         "memory": {
             "min_free_ram_gb": settings.min_free_ram_gb,
@@ -83,6 +87,15 @@ async def runtime_settings(
             "sdxl_turbo_lora": settings.sdxl_turbo_lora,
             "tts_gpu_layers": settings.tts_gpu_layers,
             "tts_timeout_seconds": settings.tts_timeout_seconds,
+            "transcription_device": settings.transcription_device,
+            "transcription_compute_type": settings.transcription_compute_type,
+            "transcription_timeout_seconds": settings.transcription_timeout_seconds,
+            "embed_gpu_layers": settings.embed_gpu_layers,
+            "embed_timeout_seconds": settings.embed_timeout_seconds,
+            "rag_chunk_chars": settings.rag_chunk_chars,
+            "rag_chunk_overlap": settings.rag_chunk_overlap,
+            "vision_gpu_layers": settings.vision_gpu_layers,
+            "vision_timeout_seconds": settings.vision_timeout_seconds,
         },
         "counts": {
             "models": len(descriptors),
@@ -91,6 +104,18 @@ async def runtime_settings(
             "loras": len(registry.loras()),
             "tts_models": len(list(settings.tts_models_dir.glob("*.gguf")))
             if settings.tts_models_dir.exists()
+            else 0,
+            "transcription_models": len([
+                p for p in settings.transcription_models_dir.iterdir()
+                if not p.name.startswith(".")
+            ])
+            if settings.transcription_models_dir.exists()
+            else 0,
+            "embed_models": len(list(settings.embed_models_dir.glob("*.gguf")))
+            if settings.embed_models_dir.exists()
+            else 0,
+            "vision_models": len(list(settings.vision_models_dir.glob("*.gguf")))
+            if settings.vision_models_dir.exists()
             else 0,
         },
         "gpu": arbiter.status(),

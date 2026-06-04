@@ -167,6 +167,8 @@ class ChatSend(BaseModel):
     stop: list[str] | None = None
     image_tool: bool = False
     image_model_id: str | None = None
+    document_tool: bool = False
+    rag_top_k: int = 5
 
 
 class ChatSendOut(BaseModel):

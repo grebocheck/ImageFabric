@@ -301,11 +301,40 @@ P3 implementation notes:
   `bin` ignored), packages selected files as context, creates a focused LLM
   conversation, and jumps to the LLM tab for streaming/history. Shipped
   2026-06-04.
-- [ ] **P4.5e — Remaining superapp + model-gated chat.** More workspace tabs
-  (transcription/whisper), broader model-driven function-calling, **vision**
-  (needs a multimodal GGUF), **RAG** (needs an embedding model), and live TTS
-  validation once a `models/tts/*.gguf` model is installed. Phased plan:
-  [docs/chat-plan.md](docs/chat-plan.md).
+- [x] **P4.5e1 — Transcription workspace shell.** Added a dedicated Transcribe
+  tab plus `/api/transcription/*` endpoints. It scans `models/transcribe` for
+  local Whisper models, reports installed engines (`faster-whisper` /
+  `openai-whisper`), accepts audio uploads, and writes transcript JSON sidecars
+  under `data/outputs/<date>/`. It is model-gated and CPU-first by default, so
+  it does not bypass the shared GPU arbiter. Shipped 2026-06-04.
+- [x] **P4.5e2 — TTS live validation.** With local `OuteTTS-0.2-500M-Q8_0.gguf`
+  and `WavTokenizer-Large-75-F16.gguf`, `llama-tts.exe` produced a non-empty
+  CPU-only WAV at `data/outputs/2026-06-04/tts-live-validation.wav` (122,924
+  bytes; llama.cpp reported ~3.1 s total runtime). This validates the local
+  binary/model path, not voice quality. Shipped 2026-06-04.
+- [x] **P4.5e3a — RAG workspace + local embeddings.** Added a dedicated RAG tab
+  and `/api/rag/*`: document text/file indexing, persistent SQLite
+  `rag_documents`/`rag_chunks`, local CPU-only llama.cpp embeddings via
+  `models/embed/nomic-embed-text-v1.5.f16.gguf` on port 8262, vector search, and
+  "Send to LLM" with retrieved context/citation slots. Live smoke passed in
+  STUB app mode: indexed a one-chunk document and retrieved it as top match for
+  a VRAM-arbiter question (score ~0.709); the smoke document was deleted after
+  verification. Shipped 2026-06-04.
+- [x] **P4.5e3b — Vision workspace.** Added a dedicated Vision tab and
+  `/api/vision/*` endpoints using local `llama-mtmd-cli.exe`,
+  `models/vision/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf`, and
+  `mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf`. It accepts PNG/JPEG uploads,
+  saves result JSON sidecars, and defaults to CPU-only (`IMGFAB_VISION_GPU_LAYERS=0`)
+  so it does not bypass the shared GPU arbiter. Live smoke passed in STUB app
+  mode: a local PNG was described in ~7.36 s. WEBP is intentionally not accepted
+  because llama-mtmd failed to decode it locally. Shipped 2026-06-04.
+- [x] **P4.5e3c — Broader model-driven function-calling.** Chat tool mode now
+  supports both `generate_image` and `search_documents`. The new Document tool
+  lets the LLM reply with `{"tool":"search_documents","query":"...","top_k":5}`;
+  the worker runs local RAG search, creates a child LLM job with retrieved
+  context, and streams the final answer back into the same assistant message.
+  A direct parser/child-job smoke passed for the `search_documents` branch.
+  Shipped 2026-06-04.
 
 P3/UX notes:
 - Gallery reworked: the just-generated image is shown large in **full

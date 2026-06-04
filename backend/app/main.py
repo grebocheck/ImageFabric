@@ -21,8 +21,9 @@ from .core.enums import EventType
 from .core.events import Event, EventBus
 from .core.scheduler import Worker
 from .db.session import init_db
+from .services.embedding_service import embedding_service
 from .util import sysmon
-from .api import chat, code, gallery, jobs, llm, models, notes, presets, tts, ws
+from .api import chat, code, gallery, jobs, llm, models, notes, presets, rag, transcription, tts, vision, ws
 
 
 async def _mem_monitor(bus: EventBus) -> None:
@@ -53,6 +54,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         mem_task.cancel()
+        await embedding_service.stop()
         await worker.stop()
 
 
@@ -74,7 +76,10 @@ app.include_router(code.router)
 app.include_router(gallery.router)
 app.include_router(notes.router)
 app.include_router(presets.router)
+app.include_router(rag.router)
+app.include_router(transcription.router)
 app.include_router(tts.router)
+app.include_router(vision.router)
 app.include_router(ws.router)
 
 

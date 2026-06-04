@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     llm_models_dir: Path = ROOT / "models" / "llm"
     lora_models_dir: Path = ROOT / "models" / "lora"
     tts_models_dir: Path = ROOT / "models" / "tts"
+    transcription_models_dir: Path = ROOT / "models" / "transcribe"
+    embed_models_dir: Path = ROOT / "models" / "embed"
+    vision_models_dir: Path = ROOT / "models" / "vision"
     data_dir: Path = ROOT / "data"
     outputs_dir: Path = ROOT / "data" / "outputs"
     db_path: Path = ROOT / "data" / "imagefabric.db"
@@ -54,8 +57,10 @@ class Settings(BaseSettings):
     # Path to a CUDA(sm_120) `llama-server` binary. Used in real (non-stub) mode.
     llama_server_bin: Path = ROOT / "bin" / "llama" / "llama-server.exe"
     llama_tts_bin: Path = ROOT / "bin" / "llama" / "llama-tts.exe"
+    llama_mtmd_bin: Path = ROOT / "bin" / "llama" / "llama-mtmd-cli.exe"
     llama_host: str = "127.0.0.1"
     llama_port: int = 8261
+    llama_embed_port: int = 8262
     # Default launch knobs (tunable per-model later). 999 = offload all layers.
     llama_ngl: int = 999
     llama_ctx: int = 8192
@@ -63,6 +68,23 @@ class Settings(BaseSettings):
     # default so it cannot bypass the shared GPU arbiter.
     tts_gpu_layers: int = 0
     tts_timeout_seconds: int = 600
+    # Transcription is CPU-only by default so it cannot bypass the shared GPU
+    # arbiter. Local model folders/files are required; no hidden downloads.
+    transcription_device: str = "cpu"
+    transcription_compute_type: str = "int8"
+    transcription_timeout_seconds: int = 1800
+    transcription_max_upload_mb: int = 512
+    # RAG embeddings run through a dedicated llama-server in embeddings mode.
+    # Keep it CPU-only by default so it can coexist with the GPU arbiter.
+    embed_gpu_layers: int = 0
+    embed_timeout_seconds: int = 120
+    rag_chunk_chars: int = 1200
+    rag_chunk_overlap: int = 160
+    # Vision uses llama-mtmd-cli for local multimodal GGUF + mmproj pairs. Keep
+    # it CPU-only by default; raising this should be treated like GPU work.
+    vision_gpu_layers: int = 0
+    vision_timeout_seconds: int = 900
+    vision_max_upload_mb: int = 64
 
     # --- FLUX loading (M0 finding) ---
     # The local flux_dev is an fp8 all-in-one checkpoint; diffusers needs a
@@ -153,6 +175,9 @@ class Settings(BaseSettings):
             self.lora_models_dir,
             self.llm_models_dir,
             self.tts_models_dir,
+            self.transcription_models_dir,
+            self.embed_models_dir,
+            self.vision_models_dir,
         ):
             d.mkdir(parents=True, exist_ok=True)
 

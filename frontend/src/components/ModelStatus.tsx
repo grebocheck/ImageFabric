@@ -1,6 +1,6 @@
 import type { GpuStatus } from "../types";
 
-export type View = "images" | "llm" | "notes" | "tts" | "code" | "system";
+export type View = "images" | "llm" | "notes" | "tts" | "transcription" | "code" | "rag" | "vision" | "system";
 
 const familyColor: Record<string, string> = {
   flux: "bg-violet-600",

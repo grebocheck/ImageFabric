@@ -1,4 +1,4 @@
-import type { ChatConversation, ChatConversationDetail, ChatConversationImport, ChatImportResult, ChatSendBody, ChatSendResult, CodeFile, CodeFileContent, ImageItem, Job, JobCreate, JobType, LlmConfig, Lora, Model, Note, Preset, PresetImportItem, PresetImportResult, RuntimeSettings, TtsGenerateBody, TtsGenerateResult, TtsStatus } from "../types";
+import type { ChatConversation, ChatConversationDetail, ChatConversationImport, ChatImportResult, ChatSendBody, ChatSendResult, CodeFile, CodeFileContent, ImageItem, Job, JobCreate, JobType, LlmConfig, Lora, Model, Note, Preset, PresetImportItem, PresetImportResult, RagDocument, RagSearchResponse, RagStatus, RuntimeSettings, TranscriptionResult, TranscriptionStatus, TtsGenerateBody, TtsGenerateResult, TtsStatus, VisionResult, VisionStatus } from "../types";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -100,6 +100,47 @@ export const api = {
   generateTts: (body: TtsGenerateBody) =>
     fetch("/api/tts/generate", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) })
       .then(j<TtsGenerateResult>),
+
+  transcriptionStatus: () => fetch("/api/transcription/status").then(j<TranscriptionStatus>),
+  transcribeAudio: (body: { file: File; model_id: string; language?: string; task?: string; initial_prompt?: string }) => {
+    const form = new FormData();
+    form.append("file", body.file);
+    form.append("model_id", body.model_id);
+    if (body.language?.trim()) form.append("language", body.language.trim());
+    if (body.task) form.append("task", body.task);
+    if (body.initial_prompt?.trim()) form.append("initial_prompt", body.initial_prompt.trim());
+    return fetch("/api/transcription/transcribe", { method: "POST", body: form }).then(j<TranscriptionResult>);
+  },
+
+  ragStatus: () => fetch("/api/rag/status").then(j<RagStatus>),
+  listRagDocuments: (q?: string) => {
+    const params = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
+    return fetch(`/api/rag/documents${params}`).then(j<RagDocument[]>);
+  },
+  createRagDocument: (body: { title?: string; content: string; source?: string; model_id?: string }) =>
+    fetch("/api/rag/documents", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) })
+      .then(j<RagDocument>),
+  uploadRagDocument: (body: { file: File; title?: string; model_id?: string }) => {
+    const form = new FormData();
+    form.append("file", body.file);
+    if (body.title?.trim()) form.append("title", body.title.trim());
+    if (body.model_id) form.append("model_id", body.model_id);
+    return fetch("/api/rag/documents/upload", { method: "POST", body: form }).then(j<RagDocument>);
+  },
+  deleteRagDocument: (id: string) => fetch(`/api/rag/documents/${id}`, { method: "DELETE" }).then(j<{ deleted: string }>),
+  searchRag: (body: { query: string; top_k?: number; model_id?: string }) =>
+    fetch("/api/rag/search", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) })
+      .then(j<RagSearchResponse>),
+
+  visionStatus: () => fetch("/api/vision/status").then(j<VisionStatus>),
+  analyzeVision: (body: { file: File; prompt: string; model_id: string; projector_id: string }) => {
+    const form = new FormData();
+    form.append("file", body.file);
+    form.append("prompt", body.prompt);
+    form.append("model_id", body.model_id);
+    form.append("projector_id", body.projector_id);
+    return fetch("/api/vision/analyze", { method: "POST", body: form }).then(j<VisionResult>);
+  },
 
   listCodeFiles: (q?: string) => {
     const params = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";

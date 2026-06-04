@@ -183,6 +183,8 @@ export interface ChatSendBody {
   stop?: string[];
   image_tool?: boolean;
   image_model_id?: string;
+  document_tool?: boolean;
+  rag_top_k?: number;
 }
 
 export interface LlmConfig {
@@ -242,6 +244,111 @@ export interface TtsGenerateResult {
   metadata_path: string;
   model_id: string;
   vocoder_id?: string | null;
+  duration_seconds: number;
+}
+
+export interface TranscriptionModel {
+  id: string;
+  name: string;
+  path: string;
+  size_bytes: number;
+  engine: "faster-whisper" | "openai-whisper";
+}
+
+export interface TranscriptionStatus {
+  models_dir: string;
+  models: TranscriptionModel[];
+  engines: Record<string, boolean>;
+  device: string;
+  compute_type: string;
+  max_upload_mb: number;
+  ready: boolean;
+}
+
+export interface TranscriptionSegment {
+  start: number;
+  end: number;
+  text: string;
+}
+
+export interface TranscriptionResult {
+  id: string;
+  text: string;
+  segments: TranscriptionSegment[];
+  detected_language?: string | null;
+  language_probability?: number | null;
+  metadata_url: string;
+  metadata_path: string;
+  duration_seconds: number;
+}
+
+export interface RagModel {
+  id: string;
+  name: string;
+  path: string;
+  size_bytes: number;
+}
+
+export interface RagStatus {
+  binary: string;
+  binary_exists: boolean;
+  models_dir: string;
+  models: RagModel[];
+  ready: boolean;
+  port: number;
+  gpu_layers: number;
+  chunk_chars: number;
+  chunk_overlap: number;
+}
+
+export interface RagDocument {
+  id: string;
+  title: string;
+  source?: string | null;
+  model_id?: string | null;
+  chunks_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RagSearchResult {
+  document_id: string;
+  document_title: string;
+  chunk_id: string;
+  chunk_index: number;
+  text: string;
+  score: number;
+}
+
+export interface RagSearchResponse {
+  query: string;
+  results: RagSearchResult[];
+  context: string;
+}
+
+export interface VisionModel {
+  id: string;
+  name: string;
+  path: string;
+  size_bytes: number;
+}
+
+export interface VisionStatus {
+  binary: string;
+  binary_exists: boolean;
+  models_dir: string;
+  models: VisionModel[];
+  projectors: VisionModel[];
+  ready: boolean;
+  gpu_layers: number;
+  max_upload_mb: number;
+}
+
+export interface VisionResult {
+  id: string;
+  text: string;
+  metadata_url: string;
+  metadata_path: string;
   duration_seconds: number;
 }
 

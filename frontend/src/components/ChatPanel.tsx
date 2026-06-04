@@ -146,6 +146,8 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
   const [seed, setSeed] = useState<NumOrEmpty>("");
   const [stop, setStop] = useState("");
   const [imageTool, setImageTool] = useState(false);
+  const [documentTool, setDocumentTool] = useState(false);
+  const [ragTopK, setRagTopK] = useState(5);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // personas (stored as llm presets)
@@ -246,6 +248,8 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
       setRepeatPenalty(typeof pr.repeat_penalty === "number" ? pr.repeat_penalty : "");
       setStop(Array.isArray(pr.stop) ? (pr.stop as string[]).join(", ") : "");
       setImageTool(Boolean(pr.image_tool));
+      setDocumentTool(Boolean(pr.document_tool));
+      setRagTopK(typeof pr.rag_top_k === "number" ? pr.rag_top_k : 5);
     } catch {
       setMessages([]);
     }
@@ -311,6 +315,7 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
         model_id: mdl,
         ...sampling(),
         ...(imageTool && img ? { image_tool: true, image_model_id: img.id } : {}),
+        ...(documentTool ? { document_tool: true, rag_top_k: ragTopK } : {}),
       });
       activeJob.current = res.job_id;
       setMessages((p) => p.map((m) =>
@@ -322,7 +327,7 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
       setBusy(false);
       setMessages((p) => setLastAssistant(p, `⚠ ${err instanceof Error ? err.message : "request failed"}`, true));
     }
-  }, [imageTool, modelId, llmModels, models, sampling]);
+  }, [documentTool, imageTool, modelId, llmModels, models, ragTopK, sampling]);
 
   const submitImage = useCallback(async (prompt: string, convId: string) => {
     const img = pickImageModel(models);
@@ -606,6 +611,7 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
               ~{approxTokens} / {cfg?.ctx ?? "?"} tokens
               <span className="ml-2 text-white/25">· /image &lt;prompt&gt; to generate</span>
               {imageTool && <span className="ml-2 text-white/25">· image tool on</span>}
+              {documentTool && <span className="ml-2 text-white/25">· document tool on</span>}
               {stats && <span className="ml-2 text-white/30">· {stats.tps.toFixed(1)} tok/s · TTFT {Math.round(stats.ttft)}ms</span>}
             </span>
             <div className="flex items-center gap-2">
@@ -694,6 +700,34 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
             className="h-4 w-4 accent-emerald-500"
           />
         </label>
+
+        <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2">
+          <label className="flex items-center justify-between gap-3">
+            <span>
+              <span className="block text-sm font-medium text-white/70">Document tool</span>
+              <span className="block text-xs text-white/35">model-driven RAG search</span>
+            </span>
+            <input
+              type="checkbox"
+              checked={documentTool}
+              onChange={(e) => setDocumentTool(e.target.checked)}
+              className="h-4 w-4 accent-emerald-500"
+            />
+          </label>
+          {documentTool && (
+            <label className="mt-2 block">
+              <div className={label}>RAG top K</div>
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={ragTopK}
+                onChange={(e) => setRagTopK(Math.max(1, Math.min(20, Number(e.target.value) || 5)))}
+                className={`${numField} mt-1`}
+              />
+            </label>
+          )}
+        </div>
 
         <div>
           <div className={label}>Context window (tokens)</div>

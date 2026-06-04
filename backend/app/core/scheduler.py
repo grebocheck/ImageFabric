@@ -22,6 +22,7 @@ from ..backends.base import ImageBackend, LLMBackend
 from ..backends.registry import ModelRegistry
 from ..db.models import Image, Job
 from ..db.session import session_scope
+from ..services.rag_service import search_documents as run_rag_search
 from .arbiter import GpuArbiter
 from .enums import EventType, JobStatus, JobType
 from .events import Event, EventBus
@@ -215,7 +216,10 @@ class Worker:
 
     async def _finish_llm(self, snap: JobSnapshot, text: str) -> None:
         tool_call = self._parse_image_tool_call(text, snap)
+        if tool_call is None:
+            tool_call = await self._build_document_tool_call(text, snap)
         child_job_id: str | None = None
+        child_job_type: JobType | None = None
         child_text: str | None = None
         async with session_scope() as s:
             job = await s.get(Job, snap.id)
@@ -224,17 +228,18 @@ class Worker:
                 job.progress = 1.0
                 job.finished_at = datetime.now(timezone.utc)
             if tool_call:
-                image_job = Job(
-                    type=JobType.IMAGE,
+                child_job = Job(
+                    type=tool_call["job_type"],
                     model_id=tool_call["model_id"],
                     params=tool_call["params"],
                     priority=0,
                     status=JobStatus.QUEUED,
                 )
-                s.add(image_job)
+                s.add(child_job)
                 await s.flush()
-                child_job_id = image_job.id
-                child_text = f"*generating image...*\n\n`{tool_call['params']['prompt']}`"
+                child_job_id = child_job.id
+                child_job_type = JobType(tool_call["job_type"])
+                child_text = tool_call["pending_text"]
                 if job:
                     job.result = {"text": text, "tool_call": tool_call["public"], "child_job_id": child_job_id}
                 await self._write_chat_reply(s, snap, child_text)
@@ -243,7 +248,11 @@ class Worker:
                     job.result = {"text": text}
                 await self._write_chat_reply(s, snap, text)
         if child_job_id:
-            await self._bus.publish(Event(EventType.JOB_CREATED, job_id=child_job_id, job_type=JobType.IMAGE.value))
+            await self._bus.publish(Event(
+                EventType.JOB_CREATED,
+                job_id=child_job_id,
+                job_type=(child_job_type or JobType.LLM).value,
+            ))
             await self._bus.publish(Event(
                 EventType.JOB_DONE,
                 job_id=snap.id,
@@ -294,7 +303,85 @@ class Worker:
             "width": image_params["width"],
             "height": image_params["height"],
         }
-        return {"model_id": str(config["model_id"]), "params": image_params, "public": public}
+        return {
+            "job_type": JobType.IMAGE,
+            "model_id": str(config["model_id"]),
+            "params": image_params,
+            "public": public,
+            "pending_text": f"*generating image...*\n\n`{prompt}`",
+        }
+
+    async def _build_document_tool_call(self, text: str, snap: JobSnapshot) -> dict[str, Any] | None:
+        config = snap.params.get("document_tool")
+        if not isinstance(config, dict):
+            return None
+        obj = self._extract_json_object(text)
+        if not isinstance(obj, dict):
+            return None
+        tool = obj.get("tool") or obj.get("name")
+        args = obj.get("arguments") if isinstance(obj.get("arguments"), dict) else obj
+        if tool != "search_documents" or not isinstance(args, dict):
+            return None
+        query = str(args.get("query") or "").strip()
+        if not query:
+            return None
+        top_k = _coerce_int(args.get("top_k"), int(config.get("top_k") or 5), min_value=1, max_value=20)
+
+        try:
+            async with session_scope() as s:
+                result = await run_rag_search(s, query=query, top_k=top_k)
+        except Exception as exc:  # noqa: BLE001
+            context = f"Document search failed: {exc}"
+            results: list[dict[str, Any]] = []
+        else:
+            context = str(result.get("context") or "").strip()
+            results = list(result.get("results") or [])
+
+        if not context:
+            context = "No matching local documents were found."
+
+        messages = list(snap.params.get("messages") or [])
+        messages.append({"role": "assistant", "content": text.strip()})
+        messages.append({
+            "role": "user",
+            "content": (
+                "Tool result from search_documents:\n\n"
+                f"{context}\n\n"
+                "Now answer the user's latest question using this retrieved context when relevant. "
+                "Cite bracketed source numbers like [1] when you use a retrieved source. "
+                "If the context is insufficient, say what is missing."
+            ),
+        })
+        child_params = self._child_llm_params(snap, messages)
+        child_params["tool_result"] = {
+            "tool": "search_documents",
+            "query": query,
+            "top_k": top_k,
+            "results": results,
+        }
+        public = {"tool": "search_documents", "query": query, "top_k": top_k, "matches": len(results)}
+        return {
+            "job_type": JobType.LLM,
+            "model_id": snap.model_id,
+            "params": child_params,
+            "public": public,
+            "pending_text": f"*searching documents...*\n\n`{query}`",
+        }
+
+    @staticmethod
+    def _child_llm_params(snap: JobSnapshot, messages: list[dict[str, str]]) -> dict[str, Any]:
+        params: dict[str, Any] = {
+            "messages": messages,
+            "assistant_message_id": snap.params.get("assistant_message_id"),
+            "conversation_id": snap.params.get("conversation_id"),
+            "source_llm_job_id": snap.id,
+            "temperature": snap.params.get("temperature", 0.8),
+            "max_tokens": snap.params.get("max_tokens", 512),
+        }
+        for key in ("top_p", "top_k", "min_p", "repeat_penalty", "seed", "stop"):
+            if snap.params.get(key) is not None:
+                params[key] = snap.params[key]
+        return params
 
     @staticmethod
     def _extract_json_object(text: str) -> dict[str, Any] | None:

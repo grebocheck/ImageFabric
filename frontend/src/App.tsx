@@ -10,9 +10,12 @@ import { Gallery } from "./components/Gallery";
 import { ModelStatus, type View } from "./components/ModelStatus";
 import { NotesPanel } from "./components/NotesPanel";
 import { QueuePanel } from "./components/QueuePanel";
+import { RagPanel } from "./components/RagPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { SystemPanel } from "./components/SystemPanel";
+import { TranscriptionPanel } from "./components/TranscriptionPanel";
 import { TtsPanel } from "./components/TtsPanel";
+import { VisionPanel } from "./components/VisionPanel";
 import type { BusEvent, GpuStatus, ImageItem, Job, Lora, MemSnapshot, Model, Preset } from "./types";
 
 // A workspace is one top-level tab. Adding a tab = one entry here (label drives
@@ -170,6 +173,15 @@ export default function App() {
       ),
     },
     {
+      id: "transcription",
+      label: "Transcribe",
+      render: () => (
+        <main className="flex-1 overflow-hidden p-4">
+          <TranscriptionPanel />
+        </main>
+      ),
+    },
+    {
       id: "code",
       label: "Code",
       render: () => (
@@ -181,6 +193,30 @@ export default function App() {
               setView("llm");
             }}
           />
+        </main>
+      ),
+    },
+    {
+      id: "rag",
+      label: "RAG",
+      render: () => (
+        <main className="flex-1 overflow-hidden p-4">
+          <RagPanel
+            models={models}
+            onOpenChat={(conversationId, jobId) => {
+              setChatJump({ conversationId, jobId, nonce: Date.now() });
+              setView("llm");
+            }}
+          />
+        </main>
+      ),
+    },
+    {
+      id: "vision",
+      label: "Vision",
+      render: () => (
+        <main className="flex-1 overflow-hidden p-4">
+          <VisionPanel />
         </main>
       ),
     },

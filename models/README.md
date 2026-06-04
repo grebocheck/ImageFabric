@@ -10,8 +10,9 @@ models/
 |- lora/    *.safetensors/.pt/.bin        (SDXL/FLUX LoRA adapters, SDXL turbo)
 |- llm/     *.gguf                        (llama.cpp GGUF models)
 |- tts/     *.gguf                        (llama-tts voice/acoustic models)
-|- embed/   embedding models              (future RAG workspace)
-`- vision/  multimodal/vision models      (future vision workspace)
+|- transcribe/ Whisper model folders/.pt  (local transcription models)
+|- embed/   *.gguf embedding models       (RAG workspace)
+`- vision/  *.gguf + mmproj GGUF          (Vision workspace)
 ```
 
 The backend scans these folders on startup:
@@ -23,6 +24,9 @@ The backend scans these folders on startup:
 | `lora/` | `.safetensors`, `.pt`, `.bin` | `flux`, `sdxl`, or unknown |
 | `llm/` | `.gguf` | `gguf` (llama.cpp) |
 | `tts/` | `.gguf` | TTS models for `llama-tts` |
+| `transcribe/` | local faster-whisper folders or `.pt`/`.pth` | Whisper transcription models |
+| `embed/` | `.gguf` | RAG embedding models for llama.cpp `--embeddings` |
+| `vision/` | model `.gguf` + `mmproj*.gguf` | Multimodal models for `llama-mtmd-cli` |
 
 FLUX.2 klein is a multi-file diffusers repo, not a single `.safetensors`; put the
 downloaded folder under `models/image/`, for example:

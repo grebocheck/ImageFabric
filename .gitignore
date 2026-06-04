@@ -3,6 +3,7 @@ models/image/**
 models/lora/**
 models/llm/**
 models/tts/**
+models/transcribe/**
 models/embed/**
 models/vision/**
 !models/image/.gitkeep
