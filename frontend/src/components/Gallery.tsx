@@ -142,7 +142,7 @@ export function Gallery({ images, onSearch }: { images: ImageItem[]; onSearch: (
                   key={img.id}
                   onClick={() => setSelectedId(img.id)}
                   title={String(img.params?.prompt ?? "")}
-                  className={`relative h-20 w-20 shrink-0 overflow-hidden rounded-md border ${
+                  className={`relative h-20 w-20 shrink-0 animate-fade-in overflow-hidden rounded-md border ${
                     selected?.id === img.id ? "border-violet-400/80" : "border-white/10 hover:border-white/30"
                   }`}
                 >

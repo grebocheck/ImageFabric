@@ -63,7 +63,7 @@ export function ToastHost() {
             t.onClick?.();
             dismiss(t.id);
           }}
-          className={`pointer-events-auto flex items-start gap-2 rounded-lg border px-3 py-2 text-sm text-white/85 shadow-lg shadow-black/40 transition ${kindStyle[t.kind]} ${t.onClick ? "cursor-pointer hover:brightness-125" : ""}`}
+          className={`pointer-events-auto flex animate-fade-in items-start gap-2 rounded-lg border px-3 py-2 text-sm text-white/85 shadow-lg shadow-black/40 transition ${kindStyle[t.kind]} ${t.onClick ? "cursor-pointer hover:brightness-125" : ""}`}
         >
           <span className="min-w-0 flex-1 break-words">{t.msg}</span>
           <button

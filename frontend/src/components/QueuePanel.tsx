@@ -130,7 +130,7 @@ function JobCard({
         e.preventDefault();
         void reorderQueued(job.id);
       }}
-      className={`rounded-md border border-l-2 bg-black/20 p-2.5 text-sm transition ${
+      className={`animate-fade-in rounded-md border border-l-2 bg-black/20 p-2.5 text-sm transition ${
         draggedId === job.id ? "border-violet-400/60 opacity-60" : `border-white/10 ${statusBorder[job.status]}`
       } ${job.status === "queued" ? "cursor-grab active:cursor-grabbing" : ""}`}
     >

@@ -372,12 +372,16 @@ P3/UX notes:
   `animate-spin` accent ring whenever any job is running (chat streams included,
   since they are LLM jobs). Active model is already shown. *Remaining:* a subtle
   inline VRAM bar.
-- [ ] **P5.B2 — Animated denoise preview.** Today denoise progress is text in
-  `job.progress` notes. Turn it into an animated progress bar + a shimmering
-  placeholder tile in the composer/gallery that resolves into the final image.
-- [ ] **P5.B3 — Skeleton loaders + transitions.** Skeleton placeholders for the
-  gallery, conversation list, and model lists while fetching; gentle
-  enter/leave transitions for new messages, queue items, and gallery tiles.
+- [x] **P5.B2 — Animated denoise preview.** Shipped 2026-06-04: the queue keeps
+  its per-step progress bar + denoise grid, and `ResultPreview` now shows a
+  shimmering skeleton tile while an image job runs (plus a thin shimmer bar over
+  the last result) that resolves into the final image. `generating` is derived
+  from running image jobs.
+- [x] **P5.B3 — Skeleton loaders + transitions.** Shipped 2026-06-04: a `.skeleton`
+  shimmer utility + `animate-fade-in` enter transition (Tailwind `@theme`
+  keyframes), applied to toasts, queue cards, and gallery tiles. *Remaining:*
+  dedicated skeleton placeholders while the conversation/model lists are still
+  fetching (needs per-list loading flags).
 - [x] **P5.B4 — Toasts.** Shipped 2026-06-04: a module-level toast store +
   `ToastHost` ([Toast.tsx](frontend/src/components/Toast.tsx)). Image `job.done`
   fires a success toast that jumps to History on click; `job.error` fires an

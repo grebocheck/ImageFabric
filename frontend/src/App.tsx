@@ -147,7 +147,11 @@ export default function App() {
             promptDraft={promptDraft}
             setPromptDraft={setPromptDraft}
           />
-          <ResultPreview images={images} onOpenHistory={() => setView("history")} />
+          <ResultPreview
+            images={images}
+            onOpenHistory={() => setView("history")}
+            generating={imageJobs.some((j) => j.status === "running")}
+          />
           <QueuePanel jobs={imageJobs} onChanged={refreshJobs} />
         </main>
       ),

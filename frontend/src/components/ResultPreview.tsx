@@ -4,7 +4,7 @@ import type { ImageItem } from "../types";
 
 const actionBtn = "rounded-md border border-white/15 px-2.5 py-1.5 text-xs text-white/70 transition hover:bg-white/10 hover:text-white";
 
-export function ResultPreview({ images, onOpenHistory }: { images: ImageItem[]; onOpenHistory: () => void }) {
+export function ResultPreview({ images, onOpenHistory, generating = false }: { images: ImageItem[]; onOpenHistory: () => void; generating?: boolean }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [lightbox, setLightbox] = useState(false);
   const [note, setNote] = useState("");
@@ -80,6 +80,7 @@ export function ResultPreview({ images, onOpenHistory }: { images: ImageItem[]; 
       </div>
 
       <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-black/35">
+        {generating ? <div className="skeleton absolute inset-x-0 top-0 z-10 h-0.5" /> : null}
         {selected ? (
           <button
             onClick={() => setLightbox(true)}
@@ -91,6 +92,11 @@ export function ResultPreview({ images, onOpenHistory }: { images: ImageItem[]; 
               Detail
             </span>
           </button>
+        ) : generating ? (
+          <div className="flex h-full w-full flex-col items-center justify-center gap-3 p-8">
+            <div className="skeleton h-40 w-40 rounded-lg" />
+            <span className="text-xs text-white/40">generating…</span>
+          </div>
         ) : (
           <div className="flex h-full w-full items-center justify-center p-8 text-sm text-white/30">
             Queue a generation to see the result here.
