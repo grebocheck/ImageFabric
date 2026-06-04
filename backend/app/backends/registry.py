@@ -32,6 +32,25 @@ def _nunchaku_quant(name: str) -> str:
     return "nunchaku"
 
 
+def _nunchaku_family(name: str) -> ModelFamily:
+    normalized = name.replace("_", "-")
+    if "flux.2" in normalized or "flux2" in normalized:
+        return ModelFamily.FLUX2
+    return ModelFamily.FLUX
+
+
+def _image_safetensors_paths(root: Path) -> list[Path]:
+    paths = set(root.glob("*.safetensors"))
+    for path in root.glob("*/*.safetensors"):
+        rel_parts = path.relative_to(root).parts
+        if any(part.startswith(".") for part in rel_parts[:-1]):
+            continue
+        name = path.name.lower()
+        if "svdq" in name or "nunchaku" in name:
+            paths.add(path)
+    return sorted(paths)
+
+
 class ModelRegistry:
     def __init__(self) -> None:
         self._descriptors: dict[str, ModelDescriptor] = {}
@@ -45,11 +64,11 @@ class ModelRegistry:
             sub for sub in settings.image_models_dir.iterdir()
             if sub.is_dir() and is_flux2_dir(sub)
         )
-        for path in sorted(settings.image_models_dir.glob("*.safetensors")):
+        for path in _image_safetensors_paths(settings.image_models_dir):
             name = path.stem.lower()
             if "svdq" in name or "nunchaku" in name:
                 # SVDQuant transformer-only checkpoint (Blackwell fp4/int4 turbo)
-                self._add(path, ModelFamily.FLUX, quant=_nunchaku_quant(name))
+                self._add(path, _nunchaku_family(name), quant=_nunchaku_quant(name))
             else:
                 fam = classify_image_model(path)
                 if fam is ModelFamily.FLUX2 and flux2_dirs:

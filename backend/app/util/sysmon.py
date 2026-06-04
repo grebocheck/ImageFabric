@@ -71,6 +71,8 @@ def estimate_ram_need_gb(family: ModelFamily, size_bytes: int, quant: str | None
     gb = size_bytes / _GB
     if family is ModelFamily.GGUF:
         return 2.0  # llama-server mmaps the gguf (disk-backed) -> low RSS
+    if family is ModelFamily.FLUX2 and _is_nunchaku_quant(quant):
+        return gb + 3.0
     if family is ModelFamily.FLUX2:
         # klein loaded in bnb 4-bit: weights land ~quartered; size_bytes is the
         # full bf16 repo, so scale down and add headroom for the Qwen3 encoder.
@@ -87,6 +89,8 @@ def estimate_vram_need_gb(family: ModelFamily, size_bytes: int, quant: str | Non
         return 9.8  # M0 measured SVDQuant fp4 on RTX 5070 Ti
     if family is ModelFamily.FLUX:
         return max(16.0, round(gb, 1))  # raw fp8 path can overflow 16 GB cards
+    if family is ModelFamily.FLUX2 and _is_nunchaku_quant(quant):
+        return 8.0  # SVDQuant transformer + bnb Qwen3 text encoder (target)
     if family is ModelFamily.FLUX2:
         return 13.0  # klein 9B bnb 4-bit + model offload (estimate)
     if family is ModelFamily.SDXL:

@@ -198,7 +198,11 @@ export function ImageComposer({
                 Raw FLUX fp8 is slow and high-mem on 16 GB VRAM. Prefer the nunchaku FLUX entry when available.
               </div>
             ) : null}
-            {selectedFamily === "flux2" ? (
+            {selectedFamily === "flux2" && isNunchaku(selectedImgModel) ? (
+              <div className="mt-2 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-2 text-xs text-emerald-100">
+                FLUX.2 nunchaku is an experimental sidecar path using the local SVDQuant transformer.
+              </div>
+            ) : selectedFamily === "flux2" ? (
               <div className="mt-2 rounded-md border border-sky-500/30 bg-sky-500/10 px-2.5 py-2 text-xs text-sky-100">
                 FLUX.2 klein was validated at 768x768, 6 steps, guidance 4.0 on this 16 GB GPU. Negative prompt is ignored.
               </div>
@@ -361,6 +365,7 @@ function numberParam(value: unknown, fallback: number): number {
 }
 
 function imageModelRank(model: Model): number {
+  if (model.family === "flux2" && isNunchaku(model)) return -1;
   if (model.family === "flux2") return 0;
   if (model.family === "flux" && isNunchaku(model)) return 0;
   if (!model.slow) return 1;
@@ -373,8 +378,8 @@ function pickDefaultImageModel(models: Model[]): Model | undefined {
     ?? models[0];
 }
 
-function isNunchaku(model: Model): boolean {
-  return Boolean(model.quant?.startsWith("nunchaku"));
+function isNunchaku(model: Model | undefined): boolean {
+  return Boolean(model?.quant?.startsWith("nunchaku"));
 }
 
 function modelLabel(model: Model): string {

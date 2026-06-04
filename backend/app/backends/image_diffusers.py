@@ -14,9 +14,12 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import nullcontext
+import importlib
+import importlib.util
 from importlib.util import find_spec
 from pathlib import Path
 import random
+import sys
 from typing import Any
 
 from ..config import settings
@@ -75,7 +78,9 @@ class DiffusersImageBackend(ImageBackend):
             "memory": {"start": self._memory_snapshot(torch)},
         }
 
-        if self.descriptor.family is ModelFamily.FLUX2:
+        if self.descriptor.family is ModelFamily.FLUX2 and self._is_nunchaku_quant():
+            pipe = self._load_nunchaku_flux2_klein(torch)
+        elif self.descriptor.family is ModelFamily.FLUX2:
             pipe = self._load_flux2_klein(torch)
         elif self._is_nunchaku_quant():
             pipe = self._load_nunchaku_flux(torch)
@@ -228,6 +233,109 @@ class DiffusersImageBackend(ImageBackend):
         else:  # "model" (default): encoders idle in RAM, frugal VRAM
             pipe.enable_model_cpu_offload()
         return pipe
+
+    def _load_nunchaku_flux2_klein(self, torch) -> Any:
+        """Experimental FLUX.2 [klein] SVDQuant transformer fast path.
+
+        Official nunchaku releases on this machine do not yet expose a top-level
+        NunchakuFlux2Transformer2DModel, so this can load the sidecar runtime
+        shipped beside the local model weights in models/image/flux2-klein-9b-
+        nunchaku. The Qwen3 text encoder still uses diffusers bitsandbytes 4-bit,
+        which keeps the path within the local 16 GB GPU budget without requiring
+        the separate Nunchaku Qwen3 text-encoder PR."""
+        from diffusers import Flux2KleinPipeline, PipelineQuantizationConfig  # noqa: PLC0415
+
+        NunchakuFlux2Transformer2DModel = self._import_nunchaku_flux2_transformer()
+        transformer = NunchakuFlux2Transformer2DModel.from_pretrained(
+            str(self.descriptor.path),
+            device="cuda",
+            torch_dtype=torch.bfloat16,
+        )
+
+        base = settings.flux2_nunchaku_base_dir
+        base_path = str(base) if base.is_dir() else settings.flux2_klein_repo
+        quant = settings.flux2_quant.lower().strip()
+        kwargs: dict[str, Any] = {
+            "transformer": transformer,
+            "torch_dtype": torch.bfloat16,
+        }
+        if quant in ("bnb-nf4", "bnb-fp4"):
+            qtype = "nf4" if quant == "bnb-nf4" else "fp4"
+            kwargs["quantization_config"] = PipelineQuantizationConfig(
+                quant_backend="bitsandbytes_4bit",
+                quant_kwargs={
+                    "load_in_4bit": True,
+                    "bnb_4bit_quant_type": qtype,
+                    "bnb_4bit_compute_dtype": torch.bfloat16,
+                },
+                components_to_quantize=["text_encoder"],
+            )
+
+        pipe = Flux2KleinPipeline.from_pretrained(base_path, **kwargs)
+        if hasattr(getattr(pipe, "vae", None), "enable_tiling"):
+            pipe.vae.enable_tiling()
+        if hasattr(getattr(pipe, "vae", None), "to"):
+            pipe.vae.to("cuda")
+        self._active_features["flux2_nunchaku"] = {
+            "mode": "sidecar" if self._using_flux2_sidecar() else "native",
+            "transformer": str(self.descriptor.path),
+            "text_encoder": quant if quant in ("bnb-nf4", "bnb-fp4") else "bf16",
+            "base": base_path,
+        }
+        self._active_features["flux2_placement"] = {
+            "mode": "nunchaku-transformer",
+            "transformer": "cuda",
+            "vae": "cuda",
+        }
+        return pipe
+
+    def _import_nunchaku_flux2_transformer(self):
+        try:
+            from nunchaku import NunchakuFlux2Transformer2DModel  # type: ignore[attr-defined] # noqa: PLC0415
+
+            return NunchakuFlux2Transformer2DModel
+        except (ImportError, AttributeError):
+            pass
+        try:
+            module = importlib.import_module("nunchaku.models.transformers.transformer_flux2")
+            return module.NunchakuFlux2Transformer2DModel
+        except (ImportError, AttributeError):
+            return self._import_nunchaku_flux2_sidecar()
+
+    def _using_flux2_sidecar(self) -> bool:
+        module = sys.modules.get("nunchaku.models.transformers.transformer_flux2")
+        filename = getattr(module, "__file__", "") if module else ""
+        return bool(filename and settings.flux2_nunchaku_dir.as_posix() in Path(filename).as_posix())
+
+    def _import_nunchaku_flux2_sidecar(self):
+        code_dir = settings.flux2_nunchaku_dir
+        transfer_src = code_dir / "torch_transfer_utils.py"
+        transformer_src = code_dir / "transformer_flux2.py"
+        if not transfer_src.is_file() or not transformer_src.is_file():
+            raise RuntimeError(
+                "FLUX.2 nunchaku sidecar files are missing. Expected "
+                f"{transfer_src} and {transformer_src}."
+            )
+
+        self._load_module_from_file("nunchaku.torch_transfer_utils", transfer_src)
+        module = self._load_module_from_file(
+            "nunchaku.models.transformers.transformer_flux2",
+            transformer_src,
+        )
+        return module.NunchakuFlux2Transformer2DModel
+
+    @staticmethod
+    def _load_module_from_file(module_name: str, path: Path):
+        existing = sys.modules.get(module_name)
+        if existing is not None and getattr(existing, "__file__", None) == str(path):
+            return existing
+        spec = importlib.util.spec_from_file_location(module_name, path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"Could not import {module_name} from {path}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        spec.loader.exec_module(module)
+        return module
 
     def _is_nunchaku_quant(self) -> bool:
         return bool(self.descriptor.quant and self.descriptor.quant.startswith("nunchaku"))

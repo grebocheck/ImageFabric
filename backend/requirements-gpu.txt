@@ -49,12 +49,10 @@ bitsandbytes>=0.49             # 4-bit path (Blackwell sm_120 supported)
 # - Regular SDXL/FLUX LoRAs go in models/lora (or IMGFAB_LORA_MODELS_DIR) and
 #   are selected per job through params.loras / the composer UI.
 
-# --- FLUX.2 [klein]: diffusers-native bitsandbytes 4-bit (P3) ---
+# --- FLUX.2 [klein]: diffusers-native bitsandbytes 4-bit + nunchaku TR (P3) ---
 # klein uses a small Qwen3 text encoder (not FLUX.2 [dev]'s 24 GB Mistral), so
 # 9B in 4-bit + offload fits 16 GB. It loads via diffusers' Flux2KleinPipeline
-# (already in diffusers 0.38) + bitsandbytes (already pinned above) — NO extra
-# package. nunchaku has no FLUX.2 transformer yet (PR #926), so there is no
-# SVDQuant fast path for FLUX.2 until that ships.
+# (already in diffusers 0.38) + bitsandbytes (already pinned above).
 #   huggingface-cli download black-forest-labs/FLUX.2-klein-9B \
 #     --local-dir models/image/flux2-klein-9b
 # Drop it as a FOLDER (multi-file repo); ImageFabric auto-detects it by its
@@ -62,6 +60,15 @@ bitsandbytes>=0.49             # 4-bit path (Blackwell sm_120 supported)
 # _DEFAULT_GUIDANCE / _DEFAULT_WIDTH / _DEFAULT_HEIGHT. Validated locally at
 # 768x768, 6 steps, guidance 4.0. FLUX.2 [dev] (32B + Mistral-24B) is
 # intentionally unsupported.
+#
+# Experimental nunchaku FLUX.2 transformer path (until upstream exposes the
+# class natively): place the SVDQuant transformer and sidecars under
+# models/image/flux2-klein-9b-nunchaku/. ImageFabric imports the sidecars from
+# the model folder and keeps the Qwen3 text encoder on diffusers bnb-nf4:
+#   huggingface-cli download tonera/FLUX.2-klein-9B-Nunchaku \
+#     --local-dir models/image/flux2-klein-9b-nunchaku \
+#     --include svdq-fp4_r32-FLUX.2-klein-9B-Nunchaku.safetensors \
+#     --include transformer_flux2.py --include torch_transfer_utils.py
 
 # LLM (llama.cpp): we run the `llama-server` binary as a subprocess.
 # No python package required — place a CUDA(sm_120) build under bin/llama/.

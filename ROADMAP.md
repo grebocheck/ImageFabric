@@ -187,9 +187,14 @@ M1 live validation notes (2026-06-04, RTX 5070 Ti / REAL mode):
   the normal REST queue + WebSocket progress + arbiter + diffusers path. The
   checked profile is 768x768, 6 steps, guidance 4.0, seed 20260604; runtime
   report: `data/runtime/p3-flux2-live-check.json`.
-- [ ] **P3.3 — nunchaku FLUX.2 fast path.** Once nunchaku ships
-  `NunchakuFlux2Transformer2DModel`, add an SVDQuant fp4 path (Blackwell) for a
-  ~3× speedup, mirroring the existing FLUX.1 nunchaku loader.
+- [x] **P3.3 — nunchaku FLUX.2 transformer fast path.** Added an experimental
+  SVDQuant fp4 runtime for FLUX.2 klein via the local sidecar
+  `NunchakuFlux2Transformer2DModel` code shipped with the quantized model. The
+  official nunchaku package on this machine still does not expose the class
+  top-level, so ImageFabric imports the sidecar from
+  `models/image/flux2-klein-9b-nunchaku/` without patching `.venv`. The Qwen3
+  text encoder remains diffusers bitsandbytes 4-bit until the separate nunchaku
+  Qwen3 text-encoder support lands.
 
 P3 implementation notes:
 - **To enable:** drop the klein repo into a *folder* under `models/image/` (it
@@ -216,6 +221,20 @@ P3 implementation notes:
 - When the validated repo folder exists, the registry hides the original-format
   FLUX.2 `.safetensors` from the UI so it remains a conversion source rather
   than a duplicate runtime target.
+- 2026-06-04 P3.3: downloaded
+  `models/image/flux2-klein-9b-nunchaku/svdq-fp4_r32-FLUX.2-klein-9B-Nunchaku.safetensors`
+  plus sidecar `transformer_flux2.py` / `torch_transfer_utils.py`. Registry now
+  detects it as `flux2` + `nunchaku-fp4`, and the UI prefers it over the bnb
+  FLUX.2 entry.
+- Live nunchaku result: cold run job `6693e6d4ee514eda94876833afd0dc97`, image
+  `518f80ceebde4a00a99f0f3d31c5080e`, report
+  `data/runtime/p3-flux2-nunchaku-live-check.json`; 768x768 / 6 steps took
+  ~26.41 s end-to-end, peak sampled VRAM 14.81 GB. Warm resident run job
+  `2bc7eef584184e0698fe124c899379ea`, image
+  `e7bf5935f81c46c69c425d6d35924051`, report
+  `data/runtime/p3-flux2-nunchaku-warm-check.json`; 6 steps took ~1.55 s but
+  sampled VRAM free dipped to ~0.22 GB, so FLUX.2 remains pinned to 768x768 by
+  default on this 16 GB GPU.
 
 ### P4 — Chat workspace & superapp shell
 

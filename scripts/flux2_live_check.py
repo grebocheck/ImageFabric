@@ -66,7 +66,13 @@ def choose_flux2(models: list[dict[str, Any]], model_id: str | None) -> dict[str
     candidates = [m for m in models if m.get("job_type") == "image" and m.get("family") == "flux2"]
     if not candidates:
         raise RuntimeError("No FLUX.2 image model returned by /api/models")
-    return sorted(candidates, key=lambda m: str(m.get("name", "")).lower())[0]
+    return sorted(
+        candidates,
+        key=lambda m: (
+            0 if str(m.get("quant", "")).startswith("nunchaku") else 1,
+            str(m.get("name", "")).lower(),
+        ),
+    )[0]
 
 
 def peak(samples: list[dict[str, Any]], path: tuple[str, ...], default: float = 0.0) -> float:
