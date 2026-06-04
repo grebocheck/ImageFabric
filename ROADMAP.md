@@ -228,15 +228,16 @@ P3 implementation notes:
 - [x] **P4.5b — Notes/Scratch workspace.** Persistent SQLite-backed notes with
   search, autosave, create/delete, and a workspace-registry tab. Shipped
   2026-06-04.
-- [x] **P4.5c — TTS readiness workspace.** A dedicated TTS tab reports
+- [x] **P4.5c — TTS workspace + gated generation.** A dedicated TTS tab reports
   `llama-tts.exe`, scans `models/tts` for local `.gguf` voice/acoustic models,
-  and stays generation-disabled until a local model is present. Shipped
-  2026-06-04.
+  and can generate WAV files through the local binary once a local model is
+  present. It defaults to CPU-only (`IMGFAB_TTS_GPU_LAYERS=0`) so it does not
+  bypass the shared GPU arbiter. Shipped 2026-06-04.
 - [ ] **P4.5d — Remaining superapp + model-gated chat.** More workspace tabs
-  (transcription/whisper, code assistant), TTS generation once a local
-  `models/tts/*.gguf` model is installed, and
-  broader model-driven function-calling, **vision** (needs a multimodal GGUF)
-  and **RAG** (needs an embedding model). Phased plan:
+  (transcription/whisper, code assistant), broader model-driven
+  function-calling, **vision** (needs a multimodal GGUF), **RAG** (needs an
+  embedding model), and live TTS validation once a `models/tts/*.gguf` model is
+  installed. Phased plan:
   [docs/chat-plan.md](docs/chat-plan.md).
 
 P3/UX notes:

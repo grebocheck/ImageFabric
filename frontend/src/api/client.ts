@@ -1,4 +1,4 @@
-import type { ChatConversation, ChatConversationDetail, ChatConversationImport, ChatImportResult, ChatSendBody, ChatSendResult, ImageItem, Job, JobCreate, JobType, LlmConfig, Lora, Model, Note, Preset, PresetImportItem, PresetImportResult, RuntimeSettings, TtsStatus } from "../types";
+import type { ChatConversation, ChatConversationDetail, ChatConversationImport, ChatImportResult, ChatSendBody, ChatSendResult, ImageItem, Job, JobCreate, JobType, LlmConfig, Lora, Model, Note, Preset, PresetImportItem, PresetImportResult, RuntimeSettings, TtsGenerateBody, TtsGenerateResult, TtsStatus } from "../types";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -97,4 +97,7 @@ export const api = {
     fetch(`/api/notes/${id}`, { method: "DELETE" }).then(j<{ deleted: string }>),
 
   ttsStatus: () => fetch("/api/tts/status").then(j<TtsStatus>),
+  generateTts: (body: TtsGenerateBody) =>
+    fetch("/api/tts/generate", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) })
+      .then(j<TtsGenerateResult>),
 };

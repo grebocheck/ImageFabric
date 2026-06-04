@@ -227,3 +227,20 @@ export interface TtsStatus {
   models: TtsModel[];
   ready: boolean;
 }
+
+export interface TtsGenerateBody {
+  model_id: string;
+  text: string;
+  vocoder_id?: string | null;
+  use_guide_tokens?: boolean;
+}
+
+export interface TtsGenerateResult {
+  id: string;
+  url: string;
+  path: string;
+  metadata_path: string;
+  model_id: string;
+  vocoder_id?: string | null;
+  duration_seconds: number;
+}

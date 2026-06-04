@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
-import type { TtsStatus } from "../types";
+import type { TtsGenerateResult, TtsStatus } from "../types";
 
 const field = "w-full rounded-md bg-black/30 border border-white/10 px-2.5 py-1.5 text-sm outline-none focus:border-emerald-500";
 
@@ -14,6 +14,11 @@ export function TtsPanel() {
   const [status, setStatus] = useState<TtsStatus | null>(null);
   const [text, setText] = useState("Hello from ImageFabric.");
   const [modelId, setModelId] = useState("");
+  const [vocoderId, setVocoderId] = useState("");
+  const [useGuideTokens, setUseGuideTokens] = useState(false);
+  const [result, setResult] = useState<TtsGenerateResult | null>(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     api.ttsStatus().then((s) => {
@@ -24,6 +29,26 @@ export function TtsPanel() {
 
   const models = status?.models ?? [];
   const ready = Boolean(status?.ready && modelId);
+  const canGenerate = ready && Boolean(text.trim()) && !loading;
+
+  async function onGenerate() {
+    if (!canGenerate) return;
+    setLoading(true);
+    setError("");
+    try {
+      const next = await api.generateTts({
+        model_id: modelId,
+        text: text.trim(),
+        vocoder_id: vocoderId || null,
+        use_guide_tokens: useGuideTokens,
+      });
+      setResult(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="flex h-full gap-3">
@@ -48,6 +73,24 @@ export function TtsPanel() {
             {models.map((m) => <option key={m.id} value={m.id}>{m.name} ({size(m.size_bytes)})</option>)}
           </select>
         </label>
+
+        <label>
+          <div className="text-xs uppercase tracking-wide text-white/40">Vocoder</div>
+          <select value={vocoderId} onChange={(e) => setVocoderId(e.target.value)} className={`${field} mt-1`}>
+            <option value="">none</option>
+            {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        </label>
+
+        <label className="flex items-center gap-2 text-xs text-white/55">
+          <input
+            type="checkbox"
+            checked={useGuideTokens}
+            onChange={(e) => setUseGuideTokens(e.target.checked)}
+            className="h-4 w-4 accent-emerald-500"
+          />
+          Guide tokens
+        </label>
       </aside>
 
       <section className="flex min-w-0 flex-1 flex-col rounded-lg border border-white/10">
@@ -59,16 +102,31 @@ export function TtsPanel() {
           onChange={(e) => setText(e.target.value)}
           className="min-h-0 flex-1 resize-none bg-transparent p-4 text-sm leading-6 text-white/80 outline-none placeholder:text-white/25"
         />
+        {result && (
+          <div className="border-t border-white/10 p-3">
+            <div className="mb-2 flex items-center justify-between text-xs text-white/45">
+              <span>{result.duration_seconds.toFixed(1)}s</span>
+              <a href={result.url} download className="text-emerald-300 hover:text-emerald-200">
+                Download WAV
+              </a>
+            </div>
+            <audio controls src={result.url} className="w-full" />
+          </div>
+        )}
         <div className="flex items-center justify-between border-t border-white/10 p-3">
-          <span className="text-xs text-white/35">
-            {ready ? "ready" : "waiting for local model"}
+          <span
+            className={`min-w-0 truncate text-xs ${error ? "text-red-300" : "text-white/35"}`}
+            title={error || undefined}
+          >
+            {error || (ready ? "ready" : "waiting for local model")}
           </span>
           <button
-            disabled
-            className="rounded-md bg-emerald-600 px-4 py-1.5 text-sm font-medium opacity-30"
-            title="Generation will be enabled once a local TTS model is present"
+            onClick={onGenerate}
+            disabled={!canGenerate}
+            className="rounded-md bg-emerald-600 px-4 py-1.5 text-sm font-medium hover:bg-emerald-500 disabled:opacity-30 disabled:hover:bg-emerald-600"
+            title={ready ? "Generate WAV" : "Waiting for local TTS model"}
           >
-            Generate
+            {loading ? "Generating..." : "Generate"}
           </button>
         </div>
       </section>

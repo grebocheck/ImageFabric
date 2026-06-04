@@ -59,6 +59,10 @@ class Settings(BaseSettings):
     # Default launch knobs (tunable per-model later). 999 = offload all layers.
     llama_ngl: int = 999
     llama_ctx: int = 8192
+    # TTS runs through a separate llama.cpp CLI for now. Keep it CPU-only by
+    # default so it cannot bypass the shared GPU arbiter.
+    tts_gpu_layers: int = 0
+    tts_timeout_seconds: int = 600
 
     # --- FLUX loading (M0 finding) ---
     # The local flux_dev is an fp8 all-in-one checkpoint; diffusers needs a

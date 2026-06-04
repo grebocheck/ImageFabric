@@ -32,3 +32,6 @@ huggingface-cli download black-forest-labs/FLUX.2-klein-9B --local-dir models/im
 Environment variables like `IMGFAB_IMAGE_MODELS_DIR`, `IMGFAB_LORA_MODELS_DIR`,
 `IMGFAB_LLM_MODELS_DIR`, and `IMGFAB_TTS_MODELS_DIR` exist for development, but
 the project default is to keep model storage inside `models/`.
+
+TTS output WAV files and their JSON sidecars are runtime artifacts, so they are
+written under `data/outputs/<date>/`, not under `models/`.

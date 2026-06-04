@@ -81,12 +81,17 @@ async def runtime_settings(
             "torch_compile_mode": settings.torch_compile_mode,
             "flux_step_cache": settings.flux_step_cache,
             "sdxl_turbo_lora": settings.sdxl_turbo_lora,
+            "tts_gpu_layers": settings.tts_gpu_layers,
+            "tts_timeout_seconds": settings.tts_timeout_seconds,
         },
         "counts": {
             "models": len(descriptors),
             "image_models": sum(1 for d in descriptors if d.job_type.value == "image"),
             "llm_models": sum(1 for d in descriptors if d.job_type.value == "llm"),
             "loras": len(registry.loras()),
+            "tts_models": len(list(settings.tts_models_dir.glob("*.gguf")))
+            if settings.tts_models_dir.exists()
+            else 0,
         },
         "gpu": arbiter.status(),
         "mem": sysmon.snapshot(),
