@@ -57,15 +57,16 @@ already does the LLM↔image swap). New workspaces plug in the same way. The DB
 
 ## Phase C4 — Superapp shell
 
-- **C4.1 Workspace/plugin registry.** Promote tabs to a declared list of
+- [x] **C4.3 Command palette (Ctrl+K)** — navigate tabs + run actions (settings,
+  free GPU); ⌘K button in the header. Plus conversation **search** in the chat
+  sidebar and **export** a conversation to Markdown. Shipped 2026-06-04.
+- [ ] **C4.1 Workspace/plugin registry.** Promote tabs to a declared list of
   workspaces (Images, Chat, + future). Each is a self-contained module over the
   shared arbiter/queue.
-- **C4.2 Candidate future tabs** (we already have the binaries for some):
+- [ ] **C4.2 Candidate future tabs** (we already have the binaries for some):
   Transcription (whisper), **TTS** (`llama-tts`), Code assistant, Notes/scratch,
   Batch/automation runner.
-- **C4.3 Command palette (Ctrl+K)**, global shortcuts, settings hub, theming.
-- **C4.4 Export/import** of conversations, presets, personas; everything under
-  `data/` for easy backup.
+- [ ] **C4.4 Import** of conversations/presets/personas (export shipped).
 
 ---
 

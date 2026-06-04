@@ -21,6 +21,7 @@ export function ModelStatus({
   onView,
   onFree,
   onSettings,
+  onPalette,
 }: {
   gpu: GpuStatus;
   connected: boolean;
@@ -28,6 +29,7 @@ export function ModelStatus({
   onView: (v: View) => void;
   onFree: () => void;
   onSettings: () => void;
+  onPalette: () => void;
 }) {
   return (
     <header className="flex items-center justify-between border-b border-white/10 px-5 py-3">
@@ -100,6 +102,13 @@ export function ModelStatus({
           className="rounded border border-white/15 px-2.5 py-1 text-xs hover:bg-white/10"
         >
           Settings
+        </button>
+        <button
+          onClick={onPalette}
+          title="Command palette (Ctrl+K)"
+          className="rounded border border-white/15 px-2 py-1 text-xs text-white/50 hover:bg-white/10"
+        >
+          ⌘K
         </button>
       </div>
     </header>

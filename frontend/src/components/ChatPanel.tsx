@@ -46,6 +46,7 @@ export function ChatPanel({ models }: { models: Model[] }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [stats, setStats] = useState<Stats | null>(null);
+  const [convQuery, setConvQuery] = useState("");
 
   // settings (per conversation)
   const [modelId, setModelId] = useState(saved.model_id ?? "");
@@ -332,6 +333,24 @@ export function ChatPanel({ models }: { models: Model[] }) {
     refreshPersonas();
   };
 
+  const exportChat = () => {
+    if (!messages.length) return;
+    const title = convs.find((c) => c.id === activeId)?.title ?? "chat";
+    const md = `# ${title}\n\n` + messages
+      .map((m) => `**${m.role}:**\n\n${m.content}\n`)
+      .join("\n---\n\n");
+    const url = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title.slice(0, 40).replace(/[^a-z0-9]+/gi, "-") || "chat"}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const filteredConvs = convQuery.trim()
+    ? convs.filter((c) => c.title.toLowerCase().includes(convQuery.trim().toLowerCase()))
+    : convs;
+
   const approxTokens = Math.ceil(
     (system.length + input.length + messages.reduce((n, m) => n + m.content.length, 0)) / 4,
   );
@@ -340,12 +359,18 @@ export function ChatPanel({ models }: { models: Model[] }) {
     <div className="flex h-full gap-3">
       {/* --- conversations --- */}
       <aside className="flex w-56 shrink-0 flex-col rounded-lg border border-white/10">
-        <button onClick={() => void newChat()} className="m-2 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium hover:bg-emerald-500">
+        <button onClick={() => void newChat()} className="mx-2 mt-2 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium hover:bg-emerald-500">
           + New chat
         </button>
+        <input
+          value={convQuery}
+          onChange={(e) => setConvQuery(e.target.value)}
+          placeholder="search chats"
+          className="mx-2 my-2 rounded-md border border-white/10 bg-black/30 px-2 py-1 text-xs outline-none focus:border-emerald-500"
+        />
         <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-          {convs.length === 0 && <div className="px-1 text-xs text-white/30">no conversations</div>}
-          {convs.map((c) => (
+          {filteredConvs.length === 0 && <div className="px-1 text-xs text-white/30">no conversations</div>}
+          {filteredConvs.map((c) => (
             <div
               key={c.id}
               onClick={() => void selectConversation(c.id)}
@@ -433,7 +458,17 @@ export function ChatPanel({ models }: { models: Model[] }) {
 
       {/* --- settings --- */}
       <aside className="flex w-72 shrink-0 flex-col gap-4 overflow-y-auto rounded-lg border border-white/10 p-4">
-        <h2 className="text-sm font-semibold text-white/75">Model settings</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-white/75">Model settings</h2>
+          <button
+            onClick={exportChat}
+            disabled={!messages.length}
+            className="rounded border border-white/15 px-2 py-1 text-xs hover:bg-white/10 disabled:opacity-30"
+            title="Export conversation as Markdown"
+          >
+            Export
+          </button>
+        </div>
 
         <label>
           <div className={label}>Model</div>

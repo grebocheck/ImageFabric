@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api/client";
 import { useEvents } from "./api/useEvents";
 import { ChatPanel } from "./components/ChatPanel";
+import { CommandPalette, type Command } from "./components/CommandPalette";
 import { ImageComposer } from "./components/ImageComposer";
 import { Gallery } from "./components/Gallery";
 import { ModelStatus, type View } from "./components/ModelStatus";
@@ -18,6 +19,7 @@ export default function App() {
   const [gpu, setGpu] = useState<GpuStatus>({ resident: null, model_id: null, model: null, family: null, warm: [] });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [view, setView] = useState<View>("images");
+  const [paletteOpen, setPaletteOpen] = useState(false);
 
   const [promptDraft, setPromptDraft] = useState("");
 
@@ -80,6 +82,25 @@ export default function App() {
 
   const onFree = useCallback(() => api.freeGpu().catch(() => {}), []);
 
+  // global Ctrl/Cmd+K opens the command palette
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const commands = useMemo<Command[]>(() => [
+    { id: "images", label: "Go to Images", hint: "tab", run: () => setView("images") },
+    { id: "llm", label: "Go to LLM / Chat", hint: "tab", run: () => setView("llm") },
+    { id: "settings", label: "Open Settings", run: () => setSettingsOpen(true) },
+    { id: "free", label: "Free GPU", hint: "unload models", run: onFree },
+  ], [onFree]);
+
   const imageJobs = jobs.filter((j) => j.type === "image");
 
   return (
@@ -91,6 +112,7 @@ export default function App() {
         onView={setView}
         onFree={onFree}
         onSettings={() => setSettingsOpen(true)}
+        onPalette={() => setPaletteOpen(true)}
       />
 
       {view === "images" ? (
@@ -115,6 +137,7 @@ export default function App() {
       )}
 
       <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />
     </div>
   );
 }
