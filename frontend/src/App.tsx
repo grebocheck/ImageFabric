@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { api } from "./api/client";
 import { useEvents } from "./api/useEvents";
 import { ChatPanel } from "./components/ChatPanel";
@@ -28,8 +28,9 @@ export default function App() {
   const [gpu, setGpu] = useState<GpuStatus>({ resident: null, model_id: null, model: null, family: null, warm: [] });
   const [mem, setMem] = useState<MemSnapshot | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [view, setView] = useState<View>("images");
+  const [view, setView] = useState<View>(() => (localStorage.getItem("imgfab.view") as View) || "images");
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const tabIdsRef = useRef<View[]>([]);
   const [chatJump, setChatJump] = useState<ChatJump | null>(null);
 
   const [promptDraft, setPromptDraft] = useState("");
@@ -99,12 +100,18 @@ export default function App() {
 
   const onFree = useCallback(() => api.freeGpu().catch(() => {}), []);
 
-  // global Ctrl/Cmd+K opens the command palette
+  // remember the last active tab
+  useEffect(() => { localStorage.setItem("imgfab.view", view); }, [view]);
+
+  // global shortcuts: Ctrl/Cmd+K opens the palette; Alt+1..N switches tabs
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen((v) => !v);
+      } else if (e.altKey && /^[1-9]$/.test(e.key)) {
+        const target = tabIdsRef.current[Number(e.key) - 1];
+        if (target) { e.preventDefault(); setView(target); }
       }
     };
     window.addEventListener("keydown", onKey);
@@ -188,6 +195,7 @@ export default function App() {
     },
   ];
   const active = workspaces.find((w) => w.id === view) ?? workspaces[0];
+  tabIdsRef.current = workspaces.map((w) => w.id);
 
   const commands = useMemo<Command[]>(() => [
     ...workspaces.map((w) => ({ id: `go-${w.id}`, label: `Go to ${w.label}`, hint: "tab", run: () => setView(w.id) })),
