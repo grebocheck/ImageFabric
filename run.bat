@@ -1,6 +1,6 @@
 @echo off
 REM ===========================================================================
-REM  ImageFabric launcher  (double-click me)
+REM  HFabric launcher  (double-click me)
 REM
 REM    run.bat          -> REAL mode: real models on the GPU (default)
 REM    run.bat stub     -> STUB mode: full pipeline, no GPU/ML stack

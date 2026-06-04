@@ -157,14 +157,14 @@ class DiffusersImageBackend(ImageBackend):
         Supports two layouts:
           * a multi-file diffusers repo folder under models/image/, or
           * a single-file transformer checkpoint (then the Qwen3 text encoder,
-            VAE, tokenizer and scheduler come from IMGFAB_FLUX2_KLEIN_REPO)."""
+            VAE, tokenizer and scheduler come from HFAB_FLUX2_KLEIN_REPO)."""
         from diffusers import Flux2KleinPipeline  # noqa: PLC0415
 
         path = self.descriptor.path
         quant = settings.flux2_quant.lower().strip()
         if quant not in ("bnb-nf4", "bnb-fp4", "", "none", "bf16"):
             raise ValueError(
-                "IMGFAB_FLUX2_QUANT must be one of: bnb-nf4, bnb-fp4, none "
+                "HFAB_FLUX2_QUANT must be one of: bnb-nf4, bnb-fp4, none "
                 f"(got {settings.flux2_quant!r})"
             )
         use_bnb = quant in ("bnb-nf4", "bnb-fp4")
@@ -351,7 +351,7 @@ class DiffusersImageBackend(ImageBackend):
         precision = settings.attention_matmul_precision.lower().strip()
         if precision not in ("highest", "high", "medium"):
             raise ValueError(
-                "IMGFAB_ATTENTION_MATMUL_PRECISION must be one of: highest, high, medium "
+                "HFAB_ATTENTION_MATMUL_PRECISION must be one of: highest, high, medium "
                 f"(got {settings.attention_matmul_precision!r})"
             )
         if hasattr(torch, "set_float32_matmul_precision"):
@@ -377,19 +377,19 @@ class DiffusersImageBackend(ImageBackend):
         mode = aliases.get(mode, mode)
         if mode not in {"auto", *backend_map}:
             raise ValueError(
-                "IMGFAB_ATTENTION_BACKEND must be one of: auto, flash, efficient, math, cudnn "
+                "HFAB_ATTENTION_BACKEND must be one of: auto, flash, efficient, math, cudnn "
                 f"(got {settings.attention_backend!r})"
             )
         if mode != "auto":
             enum_name = backend_map[mode]
             if sdpa_kernel is None or sdp_backend is None or enum_name not in native_backends:
                 raise ValueError(
-                    f"IMGFAB_ATTENTION_BACKEND={mode!r} requires torch.nn.attention."
+                    f"HFAB_ATTENTION_BACKEND={mode!r} requires torch.nn.attention."
                     f"SDPBackend.{enum_name}, but this torch build does not expose it."
                 )
             if mode in {"flash", "efficient", "cudnn"} and not cuda_available:
                 raise ValueError(
-                    f"IMGFAB_ATTENTION_BACKEND={mode!r} requires a CUDA torch build/device."
+                    f"HFAB_ATTENTION_BACKEND={mode!r} requires a CUDA torch build/device."
                 )
 
         feature = {
@@ -450,7 +450,7 @@ class DiffusersImageBackend(ImageBackend):
             }
         else:
             raise ValueError(
-                "IMGFAB_FLUX_STEP_CACHE must be one of: off, fb, teacache "
+                "HFAB_FLUX_STEP_CACHE must be one of: off, fb, teacache "
                 f"(got {settings.flux_step_cache!r})"
             )
         report["acceleration"]["flux_step_cache"] = self._active_features["flux_step_cache"]

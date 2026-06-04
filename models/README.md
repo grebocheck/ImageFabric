@@ -48,7 +48,7 @@ models/image/flux2-klein-9b/
 ```
 
 If you also keep an original-format `flux-2-klein-9b.safetensors` transformer in
-`models/image/`, ImageFabric treats the repo folder as the runtime model and the
+`models/image/`, HFabric treats the repo folder as the runtime model and the
 single file as a conversion/source artifact.
 
 The experimental FLUX.2 nunchaku fast path uses a separate local folder:
@@ -69,8 +69,8 @@ On Blackwell GPUs, FLUX.2 nunchaku int4 is kept as a local file if downloaded
 but is hidden from the runtime model list because nunchaku requires fp4 for this
 GPU family.
 
-Environment variables like `IMGFAB_IMAGE_MODELS_DIR`, `IMGFAB_LORA_MODELS_DIR`,
-`IMGFAB_LLM_MODELS_DIR`, and `IMGFAB_TTS_MODELS_DIR` exist for development, but
+Environment variables like `HFAB_IMAGE_MODELS_DIR`, `HFAB_LORA_MODELS_DIR`,
+`HFAB_LLM_MODELS_DIR`, and `HFAB_TTS_MODELS_DIR` exist for development, but
 the project default is to keep model storage inside `models/`.
 
 TTS output WAV files and their JSON sidecars are runtime artifacts, so they are

@@ -13,7 +13,7 @@
 Everything keeps flowing through the existing **GpuArbiter + queue + event bus**,
 so chat and image generation never fight over the 16 GB VRAM (phase-batching
 already does the LLM↔image swap). New workspaces plug in the same way. The DB
-(`data/imagefabric.db`) gains chat tables; nothing else changes shape.
+(`data/hfabric.db`) gains chat tables; nothing else changes shape.
 
 ---
 

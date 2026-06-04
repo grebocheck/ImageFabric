@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Queue a same-seed image quality A/B run across local image models.
 
-The script talks to a running ImageFabric backend. It is intentionally simple:
+The script talks to a running HFabric backend. It is intentionally simple:
 same prompt, seed, size, steps, and guidance across each selected image model,
 then it prints job/image ids and gallery URLs for side-by-side review.
 """
@@ -135,7 +135,7 @@ def main() -> int:
     health = request(args.base_url, "GET", "/api/health")
     if health.get("stub_mode") and not args.allow_stub:
         print(
-            "Backend is in STUB mode. Re-run with IMGFAB_STUB_MODE=false, "
+            "Backend is in STUB mode. Re-run with HFAB_STUB_MODE=false, "
             "or pass --allow-stub for a pipeline-only smoke test.",
             file=sys.stderr,
         )

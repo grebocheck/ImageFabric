@@ -1,4 +1,4 @@
-# --- ImageFabric backend: foundation (light) deps ---
+# --- HFabric backend: foundation (light) deps ---
 # These let the whole app run in STUB mode without any GPU/ML stack.
 fastapi==0.115.6
 uvicorn[standard]==0.34.0

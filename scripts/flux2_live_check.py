@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run a live FLUX.2 [klein] validation against a running backend.
 
-The check queues one image job through the normal ImageFabric REST API, listens
+The check queues one image job through the normal HFabric REST API, listens
 to WebSocket events, samples /api/health for RAM/VRAM peaks, and writes a compact
 JSON report. It validates the real queue -> arbiter -> diffusers path instead of
 calling the backend class directly.
@@ -126,7 +126,7 @@ async def run_check(args: argparse.Namespace) -> int:
 
     health = request(args.base_url, "GET", "/api/health")
     if health.get("stub_mode") and not args.allow_stub:
-        print("Backend is in STUB mode. Start with IMGFAB_STUB_MODE=false.", file=sys.stderr)
+        print("Backend is in STUB mode. Start with HFAB_STUB_MODE=false.", file=sys.stderr)
         return 2
     if not args.allow_existing_jobs:
         ensure_queue_idle(args.base_url)

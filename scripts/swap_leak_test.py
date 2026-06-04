@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Run the P0.3 LLM -> FLUX -> SDXL -> LLM swap-loop leak test.
 
-The script talks to a running ImageFabric backend. It queues one job at a time
+The script talks to a running HFabric backend. It queues one job at a time
 to force the exact swap order, does warmup cycles by default so lazy imports
 and one-time backend caches are not counted as leaks, frees the GPU at the end of each measured cycle, then
 asserts that process RSS and device VRAM return close to the warm baseline.
@@ -177,7 +177,7 @@ def main() -> int:
     start = health(args.base_url)
     if start.get("stub_mode") and not args.allow_stub:
         print(
-            "Backend is in STUB mode. Re-run with IMGFAB_STUB_MODE=false, "
+            "Backend is in STUB mode. Re-run with HFAB_STUB_MODE=false, "
             "or pass --allow-stub for a pipeline-only smoke test.",
             file=sys.stderr,
         )

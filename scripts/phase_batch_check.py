@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Validate that a mixed batch needs exactly one LLM <-> image swap.
 
-The check runs against a live ImageFabric backend. It subscribes to WebSocket
+The check runs against a live HFabric backend. It subscribes to WebSocket
 events, queues LLM/image/LLM/image in one REST request, and asserts that the
 worker phase-batches them as LLM/LLM/image/image with only one model-family
 transition.

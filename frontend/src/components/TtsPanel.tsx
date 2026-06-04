@@ -12,7 +12,7 @@ function size(bytes: number): string {
 
 export function TtsPanel() {
   const [status, setStatus] = useState<TtsStatus | null>(null);
-  const [text, setText] = useState("Hello from ImageFabric.");
+  const [text, setText] = useState("Hello from HFabric.");
   const [modelId, setModelId] = useState("");
   const [vocoderId, setVocoderId] = useState("");
   const [useGuideTokens, setUseGuideTokens] = useState(false);

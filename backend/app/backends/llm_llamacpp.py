@@ -49,7 +49,7 @@ class LlamaCppBackend(LLMBackend):
         if not settings.llama_server_bin.exists():
             raise FileNotFoundError(
                 f"llama-server binary not found at {settings.llama_server_bin}. "
-                "Place a CUDA(sm_120) build there or set IMGFAB_LLAMA_SERVER_BIN."
+                "Place a CUDA(sm_120) build there or set HFAB_LLAMA_SERVER_BIN."
             )
         # Launch with cwd = the binary's folder so ggml's dynamic CUDA backend
         # (ggml-cuda.dll, cudart, cublas — all shipped beside llama-server.exe) is

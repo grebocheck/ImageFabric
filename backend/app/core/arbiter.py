@@ -1,4 +1,4 @@
-"""The VRAM arbiter — the architectural heart of ImageFabric.
+"""The VRAM arbiter — the architectural heart of HFabric.
 
 On a 16 GB card you cannot hold an LLM (~12 GB) and a diffusion model at the
 same time. The arbiter enforces the invariant **at most one GPU resident at a

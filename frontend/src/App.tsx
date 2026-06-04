@@ -31,7 +31,7 @@ export default function App() {
   const [gpu, setGpu] = useState<GpuStatus>({ resident: null, model_id: null, model: null, family: null, warm: [] });
   const [mem, setMem] = useState<MemSnapshot | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [view, setView] = useState<View>(() => (localStorage.getItem("imgfab.view") as View) || "images");
+  const [view, setView] = useState<View>(() => (localStorage.getItem("hfabric.view") as View) || "images");
   const [paletteOpen, setPaletteOpen] = useState(false);
   const tabIdsRef = useRef<View[]>([]);
   const [chatJump, setChatJump] = useState<ChatJump | null>(null);
@@ -104,7 +104,7 @@ export default function App() {
   const onFree = useCallback(() => api.freeGpu().catch(() => {}), []);
 
   // remember the last active tab
-  useEffect(() => { localStorage.setItem("imgfab.view", view); }, [view]);
+  useEffect(() => { localStorage.setItem("hfabric.view", view); }, [view]);
 
   // global shortcuts: Ctrl/Cmd+K opens the palette; Alt+1..N switches tabs
   useEffect(() => {

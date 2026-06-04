@@ -1,9 +1,9 @@
-"""Central configuration for ImageFabric.
+"""Central configuration for HFabric.
 
 Paths are resolved relative to the repository root (the folder that contains
 ``ImageModels/`` and ``LLM/``) so the app finds the existing model files without
 any copying. Everything is overridable via environment variables or a ``.env``
-file (prefix ``IMGFAB_``).
+file (prefix ``HFAB_``).
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_prefix="IMGFAB_",
+        env_prefix="HFAB_",
         env_file=".env",
         extra="ignore",
     )
@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     vision_models_dir: Path = ROOT / "models" / "vision"
     data_dir: Path = ROOT / "data"
     outputs_dir: Path = ROOT / "data" / "outputs"
-    db_path: Path = ROOT / "data" / "imagefabric.db"
+    db_path: Path = ROOT / "data" / "hfabric.db"
 
     # --- llama.cpp ---
     # Path to a CUDA(sm_120) `llama-server` binary. Used in real (non-stub) mode.

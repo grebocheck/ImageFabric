@@ -7,7 +7,7 @@ import { Markdown } from "./Markdown";
 const field = "w-full rounded-md bg-black/30 border border-white/10 px-2.5 py-1.5 text-sm outline-none focus:border-emerald-500";
 const numField = "w-full rounded-md bg-black/30 border border-white/10 px-2 py-1 text-xs outline-none focus:border-emerald-500";
 const label = "text-xs uppercase tracking-wide text-white/40";
-const DEFAULTS_KEY = "imgfab.chat.defaults";
+const DEFAULTS_KEY = "hfabric.chat.defaults";
 
 type NumOrEmpty = number | "";
 type Stats = { tokens: number; tps: number; ttft: number };
@@ -485,9 +485,9 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
     }] : [];
     const presets = personas.map((p) => ({ name: p.name, type: p.type, params: p.params }));
     const title = activeConv?.title ?? "chat";
-    const slug = title.slice(0, 40).replace(/[^a-z0-9]+/gi, "-") || "imagefabric";
-    downloadJson(`${slug}.imagefabric.json`, {
-      format: "imagefabric.bundle.v1",
+    const slug = title.slice(0, 40).replace(/[^a-z0-9]+/gi, "-") || "hfabric";
+    downloadJson(`${slug}.hfabric.json`, {
+      format: "hfabric.bundle.v1",
       exported_at: new Date().toISOString(),
       conversations,
       presets,

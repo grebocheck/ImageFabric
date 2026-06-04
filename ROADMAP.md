@@ -1,4 +1,4 @@
-# ImageFabric — Roadmap & Prioritized Backlog
+# HFabric — Roadmap & Prioritized Backlog
 
 > Rebalanced after M0: **speed is not the only goal — RAM frugality is now a
 > first-class objective**, because exhausting the 32 GB of RAM makes Windows
@@ -78,11 +78,11 @@ P0 implementation notes:
 - [x] **P1.5 — Frontend polish:** presets, queue drag-reorder, gallery metadata panel.
 
 P1 implementation notes:
-- `IMGFAB_TORCH_COMPILE=true` enables guarded compile + warmup; `model.loaded`
+- `HFAB_TORCH_COMPILE=true` enables guarded compile + warmup; `model.loaded`
   includes a `load_report` with RAM/VRAM snapshots.
-- FLUX step caching is configurable with `IMGFAB_FLUX_STEP_CACHE=fb|teacache|off`
+- FLUX step caching is configurable with `HFAB_FLUX_STEP_CACHE=fb|teacache|off`
   and defaults to nunchaku first-block cache.
-- SDXL turbo LoRA support is wired through `IMGFAB_SDXL_TURBO_LORA`; real speed
+- SDXL turbo LoRA support is wired through `HFAB_SDXL_TURBO_LORA`; real speed
   numbers still need a GPU-mode run with the chosen LoRA.
 - Live phase-batching validation runner: `scripts/phase_batch_check.py`.
 - Denoise progress preview uses `job.progress` WebSocket notes in the queue UI.
@@ -100,14 +100,14 @@ P1 implementation notes:
 - [x] **P2.5 — Quality A/B:** nunchaku fp4 vs int4 vs a GGUF fallback.
 
 P2 implementation notes:
-- Keep-warm is controlled by `IMGFAB_KEEP_WARM_MODELS` and only parks image
-  backends. The arbiter enforces `IMGFAB_KEEP_WARM_MAX_MODELS` and calls the RAM
+- Keep-warm is controlled by `HFAB_KEEP_WARM_MODELS` and only parks image
+  backends. The arbiter enforces `HFAB_KEEP_WARM_MAX_MODELS` and calls the RAM
   guard before parking; `/api/gpu/free` unloads resident and warm models.
-- Attention is controlled by `IMGFAB_ATTENTION_BACKEND=auto|flash|efficient|math|cudnn`.
+- Attention is controlled by `HFAB_ATTENTION_BACKEND=auto|flash|efficient|math|cudnn`.
   The diffusers backend wraps generation in PyTorch's native SDPA selector,
   reports available SDPA kernels, float8 dtype support, and optional
   `flash_attn`/`xformers` package presence in `model.loaded` metadata.
-- LoRA management scans `models/lora` (or `IMGFAB_LORA_MODELS_DIR`), exposes
+- LoRA management scans `models/lora` (or `HFAB_LORA_MODELS_DIR`), exposes
   `/api/loras`, validates queued LoRA ids/weights against the selected image
   model, and lazy-loads selected adapters into SDXL/FLUX diffusers pipelines.
 - History/search/export/settings are wired through `/api/images?q=...`,
@@ -139,14 +139,14 @@ passes static integrity checks:
 ### M1 — Real-GPU validation (the remaining gap)
 
 The code is done; what is **not yet recorded** is a live GPU run confirming the
-numbers and invariants. To close M1, run with `IMGFAB_STUB_MODE=false` and capture:
+numbers and invariants. To close M1, run with `HFAB_STUB_MODE=false` and capture:
 
 - [x] **M1.1** — Swap-loop leak test green over ≥3 cycles
   (`python scripts\swap_leak_test.py --cycles 3`): RSS + VRAM return to baseline.
 - [x] **M1.2** — Phase-batching proven live (`python scripts\phase_batch_check.py`):
   a mixed batch does exactly one LLM↔image swap.
 - [x] **M1.3** — SDXL-turbo LoRA real speed numbers (target ~1–2 s/image) with a
-  chosen DMD2/Lightning LoRA via `IMGFAB_SDXL_TURBO_LORA`.
+  chosen DMD2/Lightning LoRA via `HFAB_SDXL_TURBO_LORA`.
 - [x] **M1.4** — `torch.compile` + step-cache speed/VRAM measured against the
   baseline, staying within the ≤26 GB RAM / ≤16 GB VRAM budget.
 - [x] **M1.5** — Quality A/B captured (`python scripts\quality_ab.py`): nunchaku
@@ -182,7 +182,7 @@ M1 live validation notes (2026-06-04, RTX 5070 Ti / REAL mode):
 - M1.2 re-run passed in the final environment: queued `LLM/image/LLM/image`,
   started as `llm,llm,image,image`, loaded families `gguf,flux`, swaps = 1.
 - M1.3 final: downloaded ByteDance `sdxl_lightning_4step_lora.safetensors` to
-  `models/lora/` and ran SDXL with `IMGFAB_SDXL_TURBO_LORA`, 1024², default-like
+  `models/lora/` and ran SDXL with `HFAB_SDXL_TURBO_LORA`, 1024², default-like
   request params. Cold end-to-end run was 19.39 s (includes pipeline + LoRA
   load); warm resident job `c2d54f14ffaf408ab118bf395bf07b7b`, image
   `bb5d91e175cb441981d99b092f11d717`, wrote
@@ -220,7 +220,7 @@ M1 live validation notes (2026-06-04, RTX 5070 Ti / REAL mode):
   SVDQuant fp4 runtime for FLUX.2 klein via the local sidecar
   `NunchakuFlux2Transformer2DModel` code shipped with the quantized model. The
   official nunchaku package on this machine still does not expose the class
-  top-level, so ImageFabric imports the sidecar from
+  top-level, so HFabric imports the sidecar from
   `models/image/flux2-klein-9b-nunchaku/` without patching `.venv`. The Qwen3
   text encoder remains diffusers bitsandbytes 4-bit until the separate nunchaku
   Qwen3 text-encoder support lands.
@@ -230,10 +230,10 @@ P3 implementation notes:
   is multi-file, not a single `.safetensors`); it is auto-detected by its
   `model_index.json`. Example:
   `huggingface-cli download black-forest-labs/FLUX.2-klein-9B --local-dir models/image/flux2-klein-9b`.
-- Knobs: `IMGFAB_FLUX2_QUANT` (`bnb-nf4`|`bnb-fp4`|`none`),
-  `IMGFAB_FLUX2_OFFLOAD` (`model`|`sequential`|`none`),
-  `IMGFAB_FLUX2_DEFAULT_STEPS` (6), `IMGFAB_FLUX2_DEFAULT_GUIDANCE` (4.0),
-  `IMGFAB_FLUX2_DEFAULT_WIDTH`/`HEIGHT` (768).
+- Knobs: `HFAB_FLUX2_QUANT` (`bnb-nf4`|`bnb-fp4`|`none`),
+  `HFAB_FLUX2_OFFLOAD` (`model`|`sequential`|`none`),
+  `HFAB_FLUX2_DEFAULT_STEPS` (6), `HFAB_FLUX2_DEFAULT_GUIDANCE` (4.0),
+  `HFAB_FLUX2_DEFAULT_WIDTH`/`HEIGHT` (768).
 - Detection, sizing, RAM/VRAM estimates and a stub generate were verified
   end-to-end with a fake klein folder before the real-model run.
 - 2026-06-04: the local single-file transformer
@@ -294,7 +294,7 @@ P3 implementation notes:
 - [x] **P4.5c — TTS workspace + gated generation.** A dedicated TTS tab reports
   `llama-tts.exe`, scans `models/tts` for local `.gguf` voice/acoustic models,
   and can generate WAV files through the local binary once a local model is
-  present. It defaults to CPU-only (`IMGFAB_TTS_GPU_LAYERS=0`) so it does not
+  present. It defaults to CPU-only (`HFAB_TTS_GPU_LAYERS=0`) so it does not
   bypass the shared GPU arbiter. Shipped 2026-06-04.
 - [x] **P4.5d — Code assistant workspace.** A Code tab searches/reads local
   repository text files (with `models`, `data`, `.venv`, `node_modules`, and
@@ -324,7 +324,7 @@ P3 implementation notes:
   `/api/vision/*` endpoints using local `llama-mtmd-cli.exe`,
   `models/vision/Qwen2.5-VL-3B-Instruct-Q4_K_M.gguf`, and
   `mmproj-Qwen2.5-VL-3B-Instruct-Q8_0.gguf`. It accepts PNG/JPEG uploads,
-  saves result JSON sidecars, and defaults to CPU-only (`IMGFAB_VISION_GPU_LAYERS=0`)
+  saves result JSON sidecars, and defaults to CPU-only (`HFAB_VISION_GPU_LAYERS=0`)
   so it does not bypass the shared GPU arbiter. Live smoke passed in STUB app
   mode: a local PNG was described in ~7.36 s. WEBP is intentionally not accepted
   because llama-mtmd failed to decode it locally. Shipped 2026-06-04.
@@ -342,6 +342,76 @@ P3/UX notes:
   lightbox, **Show in folder** (`/api/images/{id}/reveal` opens the OS file
   manager), PNG/JSON export, and a history strip of previous results.
 
+### P5 — UX & visual polish (comfort + identity)
+
+> Functionally the superapp is complete; what's missing is *feel*. The shell is
+> a flat dark grid of native `<select>`s with almost no motion, no brand mark,
+> and no window into what the model is doing while it works. P5 makes the LLM and
+> image tabs **comfortable to live in**: a real visual identity, "something is
+> happening" feedback, styled controls, and a streaming view of the model's
+> reasoning. This is presentation only — no change to the memory/VRAM invariants.
+
+**P5.A — Visual identity & design system**
+- [ ] **P5.A1 — Brand mark + app shell.** An SVG HFabric logo/wordmark in the
+  header, a matching favicon, and an app/window icon. Replace the bare title with
+  a brand lockup.
+- [ ] **P5.A2 — Design tokens.** Centralize the palette (surfaces, borders, text,
+  one **accent** color, success/warn/error) as CSS variables / Tailwind 4
+  `@theme` tokens in [index.css](frontend/src/index.css), replacing the ad-hoc
+  hex literals (`#0b0d12`, `#e6e8ef`, …) scattered across components. Consistent
+  radii, elevation, and visible focus rings for keyboard users.
+- [ ] **P5.A3 — Theme toggle (optional).** Light/dim/dark variants driven by the
+  same tokens, persisted to `localStorage` next to `hfabric.view`.
+
+**P5.B — "Work is happening" feedback (execution animation)**
+- [ ] **P5.B1 — Global activity indicator.** Extend the header connection dot in
+  [ModelStatus.tsx](frontend/src/components/ModelStatus.tsx) with a working
+  pulse/spinner whenever a job is running or a chat stream is open, plus the
+  active model + a subtle VRAM bar.
+- [ ] **P5.B2 — Animated denoise preview.** Today denoise progress is text in
+  `job.progress` notes. Turn it into an animated progress bar + a shimmering
+  placeholder tile in the composer/gallery that resolves into the final image.
+- [ ] **P5.B3 — Skeleton loaders + transitions.** Skeleton placeholders for the
+  gallery, conversation list, and model lists while fetching; gentle
+  enter/leave transitions for new messages, queue items, and gallery tiles.
+- [ ] **P5.B4 — Toasts.** Non-blocking toast notifications for `job.done` /
+  `job.error` / `image.ready` (replacing today's silent refresh), with a click
+  to jump to the relevant tab.
+
+**P5.C — LLM tab comfort**
+- [ ] **P5.C1 — Thinking / reasoning panel.** gpt-oss emits a Harmony
+  `analysis` channel (and other models use `<think>…</think>`). Parse it on the
+  backend stream and render a collapsible **"Thinking…"** disclosure that streams
+  live, shows a thinking spinner, then auto-collapses when the `final` answer
+  starts — so reasoning is visible but not in the way.
+- [ ] **P5.C2 — Composer ergonomics.** Auto-growing textarea, a live context/token
+  meter, streaming caret + stop affordance, and a typing/"model is generating"
+  state. Quick chips to switch model/persona inline without opening Settings.
+- [ ] **P5.C3 — Styled selectors.** Replace the native model/persona/preset
+  `<select>`s with a styled dropdown (searchable, keyboard-navigable) showing
+  per-model badges (family, quant, est-VRAM).
+
+**P5.D — Image tab comfort**
+- [ ] **P5.D1 — Model & LoRA picker as cards.** Replace the native `<select>`s in
+  [ImageComposer.tsx](frontend/src/components/ImageComposer.tsx) with visual
+  cards carrying the existing quant / est-VRAM / "slow" badges; LoRA picker with
+  weight sliders and on/off toggles.
+- [ ] **P5.D2 — Prompt & size ergonomics.** Aspect-ratio quick buttons
+  (respecting the 768² FLUX.2 pin from P3), prompt history recall, and a styled
+  sampler/steps/guidance control group.
+- [ ] **P5.D3 — Reusable control kit.** Factor the styled `Select`, `Slider`,
+  `Toggle`, `Badge`, and `Toast` into a small shared component set so the other
+  tabs (RAG, Vision, TTS, Transcribe, Code) inherit the same look — they
+  currently each hand-roll native controls (6+ `<select>`s apiece).
+
+P5 design constraints:
+- Pure presentation: must not add a resident model, change swap behavior, or
+  touch the RAM/VRAM guard. Animations stay GPU-cheap (CSS transforms/opacity).
+- Keep the **workspace registry** contract from P4.4 — a new tab is still one
+  entry in the `workspaces` array; the control kit (P5.D3) plugs into that.
+- Accessibility: every restyled control keeps keyboard operability and a focus
+  ring; respect `prefers-reduced-motion` for all P5.B animations.
+
 ---
 
 ## Done — M0 (GPU bring-up)
@@ -356,5 +426,5 @@ bitsandbytes · llama.cpp CUDA-13.3 · nunchaku 1.3 (fp4).
 | gpt-oss-20B (llama-server) | streaming | 12.5 GB |
 
 All validated end-to-end through the worker (arbiter → backend → gallery) with
-`IMGFAB_STUB_MODE=false`. Known issue addressed by this roadmap: the nunchaku
+`HFAB_STUB_MODE=false`. Known issue addressed by this roadmap: the nunchaku
 path's encoder loading is RAM-wasteful (P0.1).

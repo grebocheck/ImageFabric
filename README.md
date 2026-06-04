@@ -1,4 +1,4 @@
-# ImageFabric
+# HFabric
 
 Local app that pairs an **LLM (prompt generation)** with **diffusion image
 generation**, built to be frugal with memory on a single 16 GB GPU. Its core is a
@@ -14,7 +14,7 @@ Target hardware: **RTX 5070 Ti 16 GB (Blackwell), 32 GB RAM, Windows 11**.
 The whole pipeline (model discovery → queue → arbiter swap → live progress over
 WebSocket → gallery with reproducible metadata) runs today **without** torch or
 llama.cpp. Real model loading is wired but lazy, and is turned on in milestone M0
-by flipping `IMGFAB_STUB_MODE=false` after the GPU stack is installed.
+by flipping `HFAB_STUB_MODE=false` after the GPU stack is installed.
 
 ## Architecture
 
@@ -72,49 +72,49 @@ Nothing is copied. See [models/README.md](models/README.md).
 
 ## Configuration
 
-Env vars (prefix `IMGFAB_`, or a `.env` file in repo root). Highlights:
+Env vars (prefix `HFAB_`, or a `.env` file in repo root). Highlights:
 
 | Var | Default | Meaning |
 |-----|---------|---------|
-| `IMGFAB_STUB_MODE` | `true` | Run without GPU/ML stack (foundation mode). |
-| `IMGFAB_PORT` | `8260` | Backend port. |
-| `IMGFAB_LLAMA_SERVER_BIN` | `bin/llama/llama-server.exe` | CUDA(sm_120) llama.cpp build. |
-| `IMGFAB_LLAMA_NGL` | `999` | GPU layers to offload (999 = full offload). |
-| `IMGFAB_LLAMA_CTX` | `8192` | llama.cpp context size. |
-| `IMGFAB_LORA_MODELS_DIR` | `models/lora` | Local SDXL/FLUX LoRA files. |
-| `IMGFAB_TTS_MODELS_DIR` | `models/tts` | Local llama-tts GGUF voice/acoustic models. |
-| `IMGFAB_TRANSCRIPTION_MODELS_DIR` | `models/transcribe` | Local Whisper model folders or `.pt` files. |
-| `IMGFAB_TRANSCRIPTION_DEVICE` | `cpu` | Transcription device; CPU-first so it does not bypass the GPU arbiter by default. |
-| `IMGFAB_EMBED_MODELS_DIR` | `models/embed` | Local GGUF embedding models for RAG. |
-| `IMGFAB_EMBED_GPU_LAYERS` | `0` | GPU layers for the RAG embedding server; CPU-only by default. |
-| `IMGFAB_VISION_MODELS_DIR` | `models/vision` | Local multimodal GGUF + mmproj files. |
-| `IMGFAB_LLAMA_MTMD_BIN` | `bin/llama/llama-mtmd-cli.exe` | llama.cpp multimodal CLI. |
-| `IMGFAB_VISION_GPU_LAYERS` | `0` | GPU layers for vision analysis; CPU-only by default. |
-| `IMGFAB_FLUX_STEP_CACHE` | `fb` | FLUX acceleration: `fb`, `teacache`, or `off`. |
-| `IMGFAB_ATTENTION_BACKEND` | `auto` | PyTorch SDPA selector: `auto`, `flash`, `efficient`, `math`, or `cudnn`. |
-| `IMGFAB_TORCH_COMPILE` | `false` | Compile FLUX transformer and run a warmup pass. |
-| `IMGFAB_SDXL_TURBO_LORA` | unset | Optional SDXL DMD2/Lightning-style LoRA source. |
-| `IMGFAB_KEEP_WARM_MODELS` | `false` | Park one image pipeline in CPU RAM between swaps. |
+| `HFAB_STUB_MODE` | `true` | Run without GPU/ML stack (foundation mode). |
+| `HFAB_PORT` | `8260` | Backend port. |
+| `HFAB_LLAMA_SERVER_BIN` | `bin/llama/llama-server.exe` | CUDA(sm_120) llama.cpp build. |
+| `HFAB_LLAMA_NGL` | `999` | GPU layers to offload (999 = full offload). |
+| `HFAB_LLAMA_CTX` | `8192` | llama.cpp context size. |
+| `HFAB_LORA_MODELS_DIR` | `models/lora` | Local SDXL/FLUX LoRA files. |
+| `HFAB_TTS_MODELS_DIR` | `models/tts` | Local llama-tts GGUF voice/acoustic models. |
+| `HFAB_TRANSCRIPTION_MODELS_DIR` | `models/transcribe` | Local Whisper model folders or `.pt` files. |
+| `HFAB_TRANSCRIPTION_DEVICE` | `cpu` | Transcription device; CPU-first so it does not bypass the GPU arbiter by default. |
+| `HFAB_EMBED_MODELS_DIR` | `models/embed` | Local GGUF embedding models for RAG. |
+| `HFAB_EMBED_GPU_LAYERS` | `0` | GPU layers for the RAG embedding server; CPU-only by default. |
+| `HFAB_VISION_MODELS_DIR` | `models/vision` | Local multimodal GGUF + mmproj files. |
+| `HFAB_LLAMA_MTMD_BIN` | `bin/llama/llama-mtmd-cli.exe` | llama.cpp multimodal CLI. |
+| `HFAB_VISION_GPU_LAYERS` | `0` | GPU layers for vision analysis; CPU-only by default. |
+| `HFAB_FLUX_STEP_CACHE` | `fb` | FLUX acceleration: `fb`, `teacache`, or `off`. |
+| `HFAB_ATTENTION_BACKEND` | `auto` | PyTorch SDPA selector: `auto`, `flash`, `efficient`, `math`, or `cudnn`. |
+| `HFAB_TORCH_COMPILE` | `false` | Compile FLUX transformer and run a warmup pass. |
+| `HFAB_SDXL_TURBO_LORA` | unset | Optional SDXL DMD2/Lightning-style LoRA source. |
+| `HFAB_KEEP_WARM_MODELS` | `false` | Park one image pipeline in CPU RAM between swaps. |
 
 ### llama.cpp memory knobs
 
 The LLM backend starts `llama-server` as a subprocess with `-ngl
-IMGFAB_LLAMA_NGL` and `--fit off`. The default `999` keeps the GGUF fully
+HFAB_LLAMA_NGL` and `--fit off`. The default `999` keeps the GGUF fully
 offloaded to VRAM, while `--fit off` prevents llama.cpp from silently reducing
 offload when another process has touched CUDA.
 
-ImageFabric leaves llama.cpp's mmap default enabled (it does not pass
+HFabric leaves llama.cpp's mmap default enabled (it does not pass
 `--no-mmap`), so the GGUF file stays disk-backed and process RSS remains low.
 When the arbiter switches to an image model, it terminates `llama-server`; that
 is the expected way to release llama.cpp VRAM completely.
 
 ### Image acceleration knobs
 
-`IMGFAB_FLUX_STEP_CACHE=fb` enables nunchaku's native first-block cache for FLUX
+`HFAB_FLUX_STEP_CACHE=fb` enables nunchaku's native first-block cache for FLUX
 pipelines. Use `teacache` for the TeaCache context manager, or `off` to compare
 baseline quality/speed.
 
-`IMGFAB_ATTENTION_BACKEND=auto` leaves scaled-dot-product attention backend
+`HFAB_ATTENTION_BACKEND=auto` leaves scaled-dot-product attention backend
 selection to PyTorch. Set it to `flash`, `efficient`, `math`, or `cudnn` to force
 a native `torch.nn.attention.sdpa_kernel` backend when the installed torch build
 and CUDA device expose it. The load report records available native SDPA
@@ -122,26 +122,26 @@ backends, float8 dtype support, and whether external `flash_attn`/`xformers`
 packages are installed; the local environment currently uses PyTorch native SDPA
 rather than those external packages.
 
-`IMGFAB_ATTENTION_ALLOW_TF32=true` and
-`IMGFAB_ATTENTION_MATMUL_PRECISION=high` set the CUDA matmul/precision policy
+`HFAB_ATTENTION_ALLOW_TF32=true` and
+`HFAB_ATTENTION_MATMUL_PRECISION=high` set the CUDA matmul/precision policy
 before image generation.
 
-`IMGFAB_TORCH_COMPILE=true` wraps the FLUX transformer with `torch.compile` using
-`IMGFAB_TORCH_COMPILE_MODE` (default `max-autotune`) and runs a 1-step warmup.
+`HFAB_TORCH_COMPILE=true` wraps the FLUX transformer with `torch.compile` using
+`HFAB_TORCH_COMPILE_MODE` (default `max-autotune`) and runs a 1-step warmup.
 The `model.loaded` WebSocket event includes a `load_report` with RAM/VRAM before
 and after compile/warmup. Compile is best-effort: if the installed torch/nunchaku
 combination fails during compile or warmup, the backend rolls back to the
 original transformer, records the failure in `load_report`, and continues
 generation without compile.
 
-Set `IMGFAB_SDXL_TURBO_LORA` to a local `.safetensors`, folder, or Hugging Face
+Set `HFAB_SDXL_TURBO_LORA` to a local `.safetensors`, folder, or Hugging Face
 repo id to load an SDXL turbo LoRA. When active, untouched default steps/guidance
-are replaced by `IMGFAB_SDXL_TURBO_STEPS` and `IMGFAB_SDXL_TURBO_GUIDANCE`.
+are replaced by `HFAB_SDXL_TURBO_STEPS` and `HFAB_SDXL_TURBO_GUIDANCE`.
 
 ### LoRA management
 
 Drop SDXL/FLUX LoRA files under `models/lora` (or set
-`IMGFAB_LORA_MODELS_DIR`). The backend scans `.safetensors`, `.pt`, and `.bin`
+`HFAB_LORA_MODELS_DIR`). The backend scans `.safetensors`, `.pt`, and `.bin`
 files on startup, exposes them at `/api/loras`, and validates queued
 `params.loras` against the selected image model. The composer filters compatible
 LoRAs and stores only public `{id,name,family,weight}` metadata in jobs/presets;
@@ -150,7 +150,7 @@ local file paths are resolved by the worker right before generation.
 ### Speech workspaces
 
 The TTS tab scans `models/tts` for local `.gguf` files and calls
-`bin/llama/llama-tts.exe`. It defaults to `IMGFAB_TTS_GPU_LAYERS=0`, so speech
+`bin/llama/llama-tts.exe`. It defaults to `HFAB_TTS_GPU_LAYERS=0`, so speech
 generation stays CPU-only unless explicitly changed.
 
 The Transcribe tab is similarly gated. `/api/transcription/status` reports local
@@ -161,14 +161,14 @@ it writes transcript metadata under `data/outputs/<date>/`.
 
 The Vision tab scans `models/vision` for a local multimodal GGUF and `mmproj`
 pair, then calls `bin/llama/llama-mtmd-cli.exe` for PNG/JPEG analysis. It
-defaults to `IMGFAB_VISION_GPU_LAYERS=0`, and stores JSON result sidecars under
+defaults to `HFAB_VISION_GPU_LAYERS=0`, and stores JSON result sidecars under
 `data/outputs/<date>/`.
 
 ### RAG workspace
 
 The RAG tab scans `models/embed` for local GGUF embedding models and starts a
-dedicated `llama-server` on `IMGFAB_LLAMA_EMBED_PORT` (default 8262) in
-`--embeddings` mode on first use. `IMGFAB_EMBED_GPU_LAYERS=0` keeps it CPU-only
+dedicated `llama-server` on `HFAB_LLAMA_EMBED_PORT` (default 8262) in
+`--embeddings` mode on first use. `HFAB_EMBED_GPU_LAYERS=0` keeps it CPU-only
 by default, so document indexing/search does not take VRAM from the shared
 arbiter.
 
@@ -178,7 +178,7 @@ and the RAG tab can create an LLM conversation with the retrieved context
 inserted into the user turn.
 
 The LLM chat tab also has a **Document tool** toggle. When enabled, the model may
-emit a structured `search_documents` call; ImageFabric runs local RAG search,
+emit a structured `search_documents` call; HFabric runs local RAG search,
 then queues a child LLM turn with the retrieved context so the final response
 streams into the same assistant message.
 
@@ -194,13 +194,13 @@ status, and current memory telemetry.
 
 ### Keep-warm policy
 
-`IMGFAB_KEEP_WARM_MODELS=true` lets the arbiter park up to
-`IMGFAB_KEEP_WARM_MAX_MODELS` image pipeline(s) in CPU RAM when switching to a
+`HFAB_KEEP_WARM_MODELS=true` lets the arbiter park up to
+`HFAB_KEEP_WARM_MAX_MODELS` image pipeline(s) in CPU RAM when switching to a
 different model. Parked models are not VRAM residents; `/api/gpu` and the header
 show them as `CPU warm`, and `/api/gpu/free` unloads them.
 
 Parking is skipped unless available RAM can satisfy the model estimate plus
-`IMGFAB_KEEP_WARM_MIN_AVAILABLE_RAM_GB` headroom, so this feature should not push
+`HFAB_KEEP_WARM_MIN_AVAILABLE_RAM_GB` headroom, so this feature should not push
 Windows toward the pagefile. It is off by default.
 
 ### Runtime checks
@@ -238,9 +238,9 @@ uses the model metadata exposed by `/api/models`, including `nunchaku-fp4` and
 and continue.
 
 For SDXL turbo validation, put a Lightning/DMD2 LoRA in `models/lora` and start
-the backend with `IMGFAB_SDXL_TURBO_LORA=<path>`. The local M1 run used
-`models/lora/sdxl_lightning_4step_lora.safetensors`, `IMGFAB_SDXL_TURBO_STEPS=4`,
-and `IMGFAB_SDXL_TURBO_GUIDANCE=1.0`.
+the backend with `HFAB_SDXL_TURBO_LORA=<path>`. The local M1 run used
+`models/lora/sdxl_lightning_4step_lora.safetensors`, `HFAB_SDXL_TURBO_STEPS=4`,
+and `HFAB_SDXL_TURBO_GUIDANCE=1.0`.
 
 ## Next: milestone M0 (GPU bring-up)
 
@@ -251,6 +251,6 @@ and `IMGFAB_SDXL_TURBO_GUIDANCE=1.0`.
    ```
    Verify: `python -c "import torch; print(torch.cuda.get_device_capability())"` → `(12, 0)`.
 2. Drop a CUDA(sm_120) `llama-server.exe` into `bin/llama/`.
-3. Set `IMGFAB_STUB_MODE=false` and generate one image with FLUX, one with SDXL,
+3. Set `HFAB_STUB_MODE=false` and generate one image with FLUX, one with SDXL,
    and one LLM completion — the same UI, now backed by real models.
 ```

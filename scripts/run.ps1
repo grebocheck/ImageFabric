@@ -1,5 +1,5 @@
 <#
-  ImageFabric launcher — ONE window, both servers.
+  HFabric launcher — ONE window, both servers.
 
     .\scripts\run.ps1          # REAL mode (real models on the GPU)
     .\scripts\run.ps1 -Stub    # STUB mode (full pipeline, no GPU/ML stack)
@@ -24,10 +24,10 @@ Set-Location $root
 $venvPy = Join-Path $root ".venv\Scripts\python.exe"
 
 if ($Stub) {
-    $env:IMGFAB_STUB_MODE = "true"
+    $env:HFAB_STUB_MODE = "true"
     Write-Host "[mode] STUB - architectural pipeline only, no GPU/ML stack" -ForegroundColor DarkYellow
 } else {
-    $env:IMGFAB_STUB_MODE = "false"
+    $env:HFAB_STUB_MODE = "false"
     Write-Host "[mode] REAL - real models on the GPU (use -Stub for no-GPU mode)" -ForegroundColor Green
 }
 

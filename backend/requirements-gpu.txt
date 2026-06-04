@@ -1,4 +1,4 @@
-# --- ImageFabric backend: GPU / ML deps (installed in M0, not needed for the foundation) ---
+# --- HFabric backend: GPU / ML deps (installed in M0, not needed for the foundation) ---
 #
 # RTX 5070 Ti is Blackwell (sm_120) -> REQUIRES CUDA 12.8 wheels (cu128).
 # Install torch FIRST from the cu128 index, then the rest:
@@ -22,7 +22,7 @@ bitsandbytes>=0.49             # 4-bit path (Blackwell sm_120 supported)
 
 # FLUX note (M0 finding): the local flux_dev.safetensors is an fp8 ComfyUI
 # all-in-one checkpoint. diffusers needs a (non-gated) config to assemble the
-# pipeline -> we use IMGFAB_FLUX_CONFIG_REPO (default ChuckMcSneed/FLUX.1-dev).
+# pipeline -> we use HFAB_FLUX_CONFIG_REPO (default ChuckMcSneed/FLUX.1-dev).
 # Running that fp8 file directly in 16 GB is SLOW (layerwise casting materializes
 # bf16 ~24 GB -> VRAM overflow). The FAST FLUX path is SVDQuant via nunchaku.
 
@@ -34,19 +34,19 @@ bitsandbytes>=0.49             # 4-bit path (Blackwell sm_120 supported)
 #    huggingface-cli download nunchaku-tech/nunchaku-flux.1-dev \
 #      svdq-fp4_r32-flux.1-dev.safetensors --local-dir models/image
 #    (T5 uses nunchaku-tech/nunchaku-t5; CLIP/VAE/tokenizers come from
-#     IMGFAB_FLUX_CONFIG_REPO, so the local 16 GB fp8 checkpoint is not read.)
+#     HFAB_FLUX_CONFIG_REPO, so the local 16 GB fp8 checkpoint is not read.)
 
 # Acceleration knobs in code:
-# - IMGFAB_FLUX_STEP_CACHE=fb enables nunchaku first-block cache by default.
-# - IMGFAB_FLUX_STEP_CACHE=teacache enables nunchaku TeaCache per generation.
-# - IMGFAB_ATTENTION_BACKEND=auto|flash|efficient|math|cudnn selects a PyTorch
+# - HFAB_FLUX_STEP_CACHE=fb enables nunchaku first-block cache by default.
+# - HFAB_FLUX_STEP_CACHE=teacache enables nunchaku TeaCache per generation.
+# - HFAB_ATTENTION_BACKEND=auto|flash|efficient|math|cudnn selects a PyTorch
 #   native SDPA backend when available. External flash-attn/xformers are optional
 #   and are only reported, not required by default.
-# - IMGFAB_TORCH_COMPILE=true wraps the FLUX transformer in torch.compile and
+# - HFAB_TORCH_COMPILE=true wraps the FLUX transformer in torch.compile and
 #   emits a model.loaded load_report with RAM/VRAM before/after warmup.
-# - IMGFAB_SDXL_TURBO_LORA=<path-or-repo> loads an SDXL DMD2/Lightning-style
+# - HFAB_SDXL_TURBO_LORA=<path-or-repo> loads an SDXL DMD2/Lightning-style
 #   LoRA and swaps untouched defaults to low-step turbo settings.
-# - Regular SDXL/FLUX LoRAs go in models/lora (or IMGFAB_LORA_MODELS_DIR) and
+# - Regular SDXL/FLUX LoRAs go in models/lora (or HFAB_LORA_MODELS_DIR) and
 #   are selected per job through params.loras / the composer UI.
 
 # --- FLUX.2 [klein]: diffusers-native bitsandbytes 4-bit + nunchaku TR (P3) ---
@@ -55,15 +55,15 @@ bitsandbytes>=0.49             # 4-bit path (Blackwell sm_120 supported)
 # (already in diffusers 0.38) + bitsandbytes (already pinned above).
 #   huggingface-cli download black-forest-labs/FLUX.2-klein-9B \
 #     --local-dir models/image/flux2-klein-9b
-# Drop it as a FOLDER (multi-file repo); ImageFabric auto-detects it by its
-# model_index.json. Knobs: IMGFAB_FLUX2_QUANT / _OFFLOAD / _DEFAULT_STEPS /
+# Drop it as a FOLDER (multi-file repo); HFabric auto-detects it by its
+# model_index.json. Knobs: HFAB_FLUX2_QUANT / _OFFLOAD / _DEFAULT_STEPS /
 # _DEFAULT_GUIDANCE / _DEFAULT_WIDTH / _DEFAULT_HEIGHT. Validated locally at
 # 768x768, 6 steps, guidance 4.0. FLUX.2 [dev] (32B + Mistral-24B) is
 # intentionally unsupported.
 #
 # Experimental nunchaku FLUX.2 transformer path (until upstream exposes the
 # class natively): place the SVDQuant transformer and sidecars under
-# models/image/flux2-klein-9b-nunchaku/. ImageFabric imports the sidecars from
+# models/image/flux2-klein-9b-nunchaku/. HFabric imports the sidecars from
 # the model folder and keeps the Qwen3 text encoder on diffusers bnb-nf4:
 #   huggingface-cli download tonera/FLUX.2-klein-9B-Nunchaku \
 #     --local-dir models/image/flux2-klein-9b-nunchaku \

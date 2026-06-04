@@ -49,7 +49,7 @@ async def lifespan(app: FastAPI):
     app.state.worker = worker
 
     worker.start()
-    mem_task = asyncio.create_task(_mem_monitor(bus), name="imgfab-mem-monitor")
+    mem_task = asyncio.create_task(_mem_monitor(bus), name="hfabric-mem-monitor")
     try:
         yield
     finally:
@@ -58,7 +58,7 @@ async def lifespan(app: FastAPI):
         await worker.stop()
 
 
-app = FastAPI(title="ImageFabric", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="HFabric", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

@@ -56,7 +56,7 @@ class Worker:
     # ----------------------------------------------------------- lifecycle
     def start(self) -> None:
         self._running = True
-        self._task = asyncio.create_task(self._loop(), name="imgfab-worker")
+        self._task = asyncio.create_task(self._loop(), name="hfabric-worker")
 
     async def stop(self) -> None:
         self._running = False

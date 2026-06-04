@@ -32,7 +32,7 @@ export function ModelStatus({
     <header className="flex items-center justify-between border-b border-white/10 px-5 py-3">
       <div className="flex items-center gap-5">
         <div className="flex items-center gap-2">
-          <span className="text-lg font-semibold tracking-tight">ImageFabric</span>
+          <span className="text-lg font-semibold tracking-tight">HFabric</span>
           <span
             className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-400" : "bg-red-500"}`}
             title={connected ? "connected" : "disconnected"}
