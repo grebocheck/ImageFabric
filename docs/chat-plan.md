@@ -76,9 +76,10 @@ already does the LLM↔image swap). New workspaces plug in the same way. The DB
   that detects `llama-tts.exe`, scans `models/tts` for local `.gguf` models,
   and generates WAV files once a local model exists. It defaults to CPU-only so
   it does not bypass the shared GPU arbiter. Shipped 2026-06-04.
-- [ ] **C4.2 more tabs** (binaries already present): transcription (whisper),
-  code assistant, plus live TTS validation once a local `models/tts/*.gguf`
-  model is installed.
+- [x] **C4.2 Code assistant tab.** Repository file search/preview plus selected
+  file context packaging into a focused LLM conversation. Shipped 2026-06-04.
+- [ ] **C4.2 more tabs**: transcription (whisper), plus live TTS validation once
+  a local `models/tts/*.gguf` model is installed.
 - [x] **C4.4 Import** of conversations/presets/personas. JSON bundles can
   restore conversations with messages plus image/LLM presets; persona presets
   are covered because they are stored as `llm` presets. Shipped 2026-06-04.

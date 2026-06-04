@@ -1,4 +1,4 @@
-import type { ChatConversation, ChatConversationDetail, ChatConversationImport, ChatImportResult, ChatSendBody, ChatSendResult, ImageItem, Job, JobCreate, JobType, LlmConfig, Lora, Model, Note, Preset, PresetImportItem, PresetImportResult, RuntimeSettings, TtsGenerateBody, TtsGenerateResult, TtsStatus } from "../types";
+import type { ChatConversation, ChatConversationDetail, ChatConversationImport, ChatImportResult, ChatSendBody, ChatSendResult, CodeFile, CodeFileContent, ImageItem, Job, JobCreate, JobType, LlmConfig, Lora, Model, Note, Preset, PresetImportItem, PresetImportResult, RuntimeSettings, TtsGenerateBody, TtsGenerateResult, TtsStatus } from "../types";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -31,7 +31,7 @@ export const api = {
 
   // --- chat conversations ---
   listConversations: () => fetch("/api/chat/conversations").then(j<ChatConversation[]>),
-  createConversation: (body: { title?: string; model_id?: string; system?: string } = {}) =>
+  createConversation: (body: { title?: string; model_id?: string; system?: string; params?: Record<string, unknown> } = {}) =>
     fetch("/api/chat/conversations", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) })
       .then(j<ChatConversation>),
   getConversation: (id: string) => fetch(`/api/chat/conversations/${id}`).then(j<ChatConversationDetail>),
@@ -100,4 +100,10 @@ export const api = {
   generateTts: (body: TtsGenerateBody) =>
     fetch("/api/tts/generate", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) })
       .then(j<TtsGenerateResult>),
+
+  listCodeFiles: (q?: string) => {
+    const params = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
+    return fetch(`/api/code/files${params}`).then(j<CodeFile[]>);
+  },
+  getCodeFile: (path: string) => fetch(`/api/code/file?path=${encodeURIComponent(path)}`).then(j<CodeFileContent>),
 };

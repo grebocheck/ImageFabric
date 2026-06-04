@@ -244,3 +244,13 @@ export interface TtsGenerateResult {
   vocoder_id?: string | null;
   duration_seconds: number;
 }
+
+export interface CodeFile {
+  path: string;
+  size_bytes: number;
+}
+
+export interface CodeFileContent extends CodeFile {
+  content: string;
+  truncated: boolean;
+}

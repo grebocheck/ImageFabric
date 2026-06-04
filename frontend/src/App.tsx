@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import { api } from "./api/client";
 import { useEvents } from "./api/useEvents";
 import { ChatPanel } from "./components/ChatPanel";
+import type { ChatJump } from "./components/ChatPanel";
+import { CodePanel } from "./components/CodePanel";
 import { CommandPalette, type Command } from "./components/CommandPalette";
 import { ImageComposer } from "./components/ImageComposer";
 import { Gallery } from "./components/Gallery";
@@ -28,6 +30,7 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [view, setView] = useState<View>("images");
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [chatJump, setChatJump] = useState<ChatJump | null>(null);
 
   const [promptDraft, setPromptDraft] = useState("");
 
@@ -137,7 +140,7 @@ export default function App() {
       label: "LLM",
       render: () => (
         <main className="flex-1 overflow-hidden p-4">
-          <ChatPanel models={models} />
+          <ChatPanel models={models} jump={chatJump} />
         </main>
       ),
     },
@@ -156,6 +159,21 @@ export default function App() {
       render: () => (
         <main className="flex-1 overflow-hidden p-4">
           <TtsPanel />
+        </main>
+      ),
+    },
+    {
+      id: "code",
+      label: "Code",
+      render: () => (
+        <main className="flex-1 overflow-hidden p-4">
+          <CodePanel
+            models={models}
+            onOpenChat={(conversationId, jobId) => {
+              setChatJump({ conversationId, jobId, nonce: Date.now() });
+              setView("llm");
+            }}
+          />
         </main>
       ),
     },

@@ -233,11 +233,15 @@ P3 implementation notes:
   and can generate WAV files through the local binary once a local model is
   present. It defaults to CPU-only (`IMGFAB_TTS_GPU_LAYERS=0`) so it does not
   bypass the shared GPU arbiter. Shipped 2026-06-04.
-- [ ] **P4.5d — Remaining superapp + model-gated chat.** More workspace tabs
-  (transcription/whisper, code assistant), broader model-driven
-  function-calling, **vision** (needs a multimodal GGUF), **RAG** (needs an
-  embedding model), and live TTS validation once a `models/tts/*.gguf` model is
-  installed. Phased plan:
+- [x] **P4.5d — Code assistant workspace.** A Code tab searches/reads local
+  repository text files (with `models`, `data`, `.venv`, `node_modules`, and
+  `bin` ignored), packages selected files as context, creates a focused LLM
+  conversation, and jumps to the LLM tab for streaming/history. Shipped
+  2026-06-04.
+- [ ] **P4.5e — Remaining superapp + model-gated chat.** More workspace tabs
+  (transcription/whisper), broader model-driven function-calling, **vision**
+  (needs a multimodal GGUF), **RAG** (needs an embedding model), and live TTS
+  validation once a `models/tts/*.gguf` model is installed. Phased plan:
   [docs/chat-plan.md](docs/chat-plan.md).
 
 P3/UX notes:

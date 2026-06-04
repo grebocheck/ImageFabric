@@ -117,7 +117,9 @@ function downloadJson(filename: string, payload: unknown) {
   URL.revokeObjectURL(url);
 }
 
-export function ChatPanel({ models }: { models: Model[] }) {
+export type ChatJump = { conversationId: string; jobId?: string; nonce: number };
+
+export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump | null }) {
   const llmModels = models.filter((m) => m.job_type === "llm");
   const saved = loadDefaults();
 
@@ -252,6 +254,19 @@ export function ChatPanel({ models }: { models: Model[] }) {
   useEffect(() => {
     if (!activeId && convs[0]) void selectConversation(convs[0].id);
   }, [convs, activeId, selectConversation]);
+
+  useEffect(() => {
+    if (!jump?.conversationId) return;
+    activeJob.current = jump.jobId ?? null;
+    if (jump.jobId) {
+      setBusy(true);
+      sendStart.current = Date.now();
+      firstAt.current = null;
+      tokCount.current = 0;
+    }
+    refreshConvs();
+    void selectConversation(jump.conversationId);
+  }, [jump, refreshConvs, selectConversation]);
 
   const newChat = useCallback(async () => {
     const c = await api.createConversation({ model_id: modelId || llmModels[0]?.id });
