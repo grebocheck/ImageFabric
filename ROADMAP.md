@@ -188,9 +188,16 @@ P3 implementation notes:
 - [x] **P4.3 — Chat→image bridge (C3.3).** `/image <prompt>` in chat queues an
   image job on the shared arbiter and renders the result inline (persisted).
   Shipped 2026-06-04.
-- [ ] **P4.4 — Chat C3 rest + superapp shell.** Model-driven function-calling,
-  vision (needs multimodal GGUF), RAG (needs embeddings), tabbed superapp shell.
-  Per the phased plan: [docs/chat-plan.md](docs/chat-plan.md).
+- [x] **P4.4 — Superapp shell (C4.1/C4.2/C4.3).** Command palette (Ctrl+K) with
+  navigation + actions, conversation search, conversation export to Markdown, a
+  live **System** monitor tab (VRAM/RAM/runtime from `mem.status`), and a
+  declarative **workspace registry** (tabs are one `workspaces` array — adding a
+  tab is one entry). Shipped 2026-06-04.
+- [ ] **P4.5 — Remaining superapp + model-gated chat.** Import
+  (conversations/presets/personas), more workspace tabs (**TTS** via `llama-tts`,
+  notes/scratch), and model-driven function-calling, **vision** (needs a
+  multimodal GGUF) and **RAG** (needs an embedding model). Phased plan:
+  [docs/chat-plan.md](docs/chat-plan.md).
 
 P3/UX notes:
 - Gallery reworked: the just-generated image is shown large in **full
