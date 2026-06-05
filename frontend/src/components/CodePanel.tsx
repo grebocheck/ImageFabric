@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
+import { Select } from "./Select";
 import type { CodeFile, CodeFileContent, Model } from "../types";
 
 const field = "w-full rounded-md bg-black/30 border border-white/10 px-2.5 py-1.5 text-sm outline-none focus:border-emerald-500";
@@ -145,10 +146,13 @@ export function CodePanel({
       <aside className="flex min-h-0 flex-col gap-3 rounded-lg border border-white/10 p-4">
         <label>
           <div className="text-xs uppercase tracking-wide text-white/40">Model</div>
-          <select value={modelId} onChange={(e) => setModelId(e.target.value)} className={`${field} mt-1`}>
-            {llmModels.length === 0 && <option value="">no LLM models</option>}
-            {llmModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
+          <Select
+            value={modelId}
+            onChange={setModelId}
+            placeholder="no LLM models"
+            className="mt-1"
+            options={llmModels.map((m) => ({ value: m.id, label: m.name }))}
+          />
         </label>
 
         <div>

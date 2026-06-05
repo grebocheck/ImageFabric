@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
+import { Select } from "./Select";
 import type { Model, RagDocument, RagSearchResponse, RagStatus } from "../types";
 
 const field = "w-full rounded-md bg-black/30 border border-white/10 px-2.5 py-1.5 text-sm outline-none focus:border-emerald-500";
@@ -235,18 +236,24 @@ export function RagPanel({
 
         <label>
           <div className="text-xs uppercase tracking-wide text-white/40">Embedding</div>
-          <select value={embedModelId} onChange={(e) => setEmbedModelId(e.target.value)} className={`${field} mt-1`}>
-            {(status?.models ?? []).length === 0 && <option value="">no embed models</option>}
-            {(status?.models ?? []).map((m) => <option key={m.id} value={m.id}>{m.name} ({size(m.size_bytes)})</option>)}
-          </select>
+          <Select
+            value={embedModelId}
+            onChange={setEmbedModelId}
+            placeholder="no embed models"
+            className="mt-1"
+            options={(status?.models ?? []).map((m) => ({ value: m.id, label: m.name, hint: size(m.size_bytes) }))}
+          />
         </label>
 
         <label>
           <div className="text-xs uppercase tracking-wide text-white/40">LLM</div>
-          <select value={llmModelId} onChange={(e) => setLlmModelId(e.target.value)} className={`${field} mt-1`}>
-            {llmModels.length === 0 && <option value="">no LLM models</option>}
-            {llmModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
+          <Select
+            value={llmModelId}
+            onChange={setLlmModelId}
+            placeholder="no LLM models"
+            className="mt-1"
+            options={llmModels.map((m) => ({ value: m.id, label: m.name }))}
+          />
         </label>
 
         <div className="grid grid-cols-2 gap-2">

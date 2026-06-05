@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
+import { Select } from "./Select";
 import type { VisionResult, VisionStatus } from "../types";
 
 const field = "w-full rounded-md bg-black/30 border border-white/10 px-2.5 py-1.5 text-sm outline-none focus:border-emerald-500";
@@ -72,18 +73,24 @@ export function VisionPanel() {
 
         <label>
           <div className="text-xs uppercase tracking-wide text-white/40">Model</div>
-          <select value={modelId} onChange={(e) => setModelId(e.target.value)} className={`${field} mt-1`}>
-            {(status?.models ?? []).length === 0 && <option value="">no vision models</option>}
-            {(status?.models ?? []).map((m) => <option key={m.id} value={m.id}>{m.name} ({size(m.size_bytes)})</option>)}
-          </select>
+          <Select
+            value={modelId}
+            onChange={setModelId}
+            placeholder="no vision models"
+            className="mt-1"
+            options={(status?.models ?? []).map((m) => ({ value: m.id, label: m.name, hint: size(m.size_bytes) }))}
+          />
         </label>
 
         <label>
           <div className="text-xs uppercase tracking-wide text-white/40">Projector</div>
-          <select value={projectorId} onChange={(e) => setProjectorId(e.target.value)} className={`${field} mt-1`}>
-            {(status?.projectors ?? []).length === 0 && <option value="">no mmproj models</option>}
-            {(status?.projectors ?? []).map((m) => <option key={m.id} value={m.id}>{m.name} ({size(m.size_bytes)})</option>)}
-          </select>
+          <Select
+            value={projectorId}
+            onChange={setProjectorId}
+            placeholder="no mmproj models"
+            className="mt-1"
+            options={(status?.projectors ?? []).map((m) => ({ value: m.id, label: m.name, hint: size(m.size_bytes) }))}
+          />
         </label>
 
         <label>

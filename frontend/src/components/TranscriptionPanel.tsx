@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { Select } from "./Select";
 import type { TranscriptionResult, TranscriptionStatus } from "../types";
 
 const field = "w-full rounded-md bg-black/30 border border-white/10 px-2.5 py-1.5 text-sm outline-none focus:border-emerald-500";
@@ -82,14 +83,13 @@ export function TranscriptionPanel() {
 
         <label>
           <div className="text-xs uppercase tracking-wide text-white/40">Model</div>
-          <select value={modelId} onChange={(e) => setModelId(e.target.value)} className={`${field} mt-1`}>
-            {models.length === 0 && <option value="">no transcription models</option>}
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name} ({m.engine}, {size(m.size_bytes)})
-              </option>
-            ))}
-          </select>
+          <Select
+            value={modelId}
+            onChange={setModelId}
+            placeholder="no transcription models"
+            className="mt-1"
+            options={models.map((m) => ({ value: m.id, label: m.name, hint: `${m.engine}, ${size(m.size_bytes)}` }))}
+          />
         </label>
 
         <label>
@@ -105,10 +105,15 @@ export function TranscriptionPanel() {
         <div className="grid grid-cols-2 gap-2">
           <label>
             <div className="text-xs uppercase tracking-wide text-white/40">Task</div>
-            <select value={task} onChange={(e) => setTask(e.target.value)} className={`${field} mt-1`}>
-              <option value="transcribe">transcribe</option>
-              <option value="translate">translate</option>
-            </select>
+            <Select
+              value={task}
+              onChange={setTask}
+              className="mt-1"
+              options={[
+                { value: "transcribe", label: "transcribe" },
+                { value: "translate", label: "translate" },
+              ]}
+            />
           </label>
           <label>
             <div className="text-xs uppercase tracking-wide text-white/40">Language</div>

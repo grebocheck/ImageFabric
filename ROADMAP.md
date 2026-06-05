@@ -399,9 +399,10 @@ P3/UX notes:
   stats, Stop affordance and a busy/"generating" state were already in place; the
   auto-growing composer textarea (caps at 200 px, then scrolls) was added
   2026-06-04. *Remaining:* inline model/persona quick-switch chips.
-- [ ] **P5.C3 — Styled selectors.** Replace the native model/persona/preset
-  `<select>`s with a styled dropdown (searchable, keyboard-navigable) showing
-  per-model badges (family, quant, est-VRAM).
+- [x] **P5.C3 — Styled selectors.** Shipped 2026-06-05: **every** native
+  `<select>` in the app is now the shared keyboard-navigable `Select` with badge
+  hints — Image (model/LoRA/preset), LLM (model/persona), and the RAG / Vision /
+  TTS / Transcribe / Code tabs. *Remaining:* in-dropdown text search/filter.
 
 **P5.D — Image tab comfort**
 - [ ] **P5.D1 — Model & LoRA picker as cards.** Replace the native `<select>`s in
@@ -411,10 +412,10 @@ P3/UX notes:
 - [x] **P5.D2 — Prompt & size ergonomics.** Aspect-ratio quick buttons
   (respecting the 768² FLUX.2 pin from P3) and a styled sampler/steps/guidance
   control group shipped 2026-06-04. *Remaining:* prompt-history recall.
-- [ ] **P5.D3 — Reusable control kit.** Factor the styled `Select`, `Slider`,
-  `Toggle`, `Badge`, and `Toast` into a small shared component set so the other
-  tabs (RAG, Vision, TTS, Transcribe, Code) inherit the same look — they
-  currently each hand-roll native controls (6+ `<select>`s apiece).
+- [~] **P5.D3 — Reusable control kit.** In progress: `Select` and `Toast` are
+  factored out and now adopted across all tabs (no hand-rolled `<select>`s
+  remain). *Remaining:* add shared `Slider` / `Toggle` / `Badge` and migrate the
+  number inputs / checkboxes / inline badges onto them.
 
 P5 design constraints:
 - Pure presentation: must not add a resident model, change swap behavior, or

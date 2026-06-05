@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { useEvents } from "../api/useEvents";
 import type { BusEvent, ChatConversation, ChatConversationImport, ChatImportMessage, ChatMessage, ChatSendBody, LlmConfig, Model, Preset, PresetImportItem } from "../types";
+import { Select } from "./Select";
 import { AssistantContent } from "./Thinking";
 
 const field = "w-full rounded-md bg-black/30 border border-white/10 px-2.5 py-1.5 text-sm outline-none focus:border-emerald-500";
@@ -691,10 +692,13 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
 
         <label>
           <div className={label}>Model</div>
-          <select value={modelId} onChange={(e) => setModelId(e.target.value)} className={`${field} mt-1`}>
-            {llmModels.length === 0 && <option value="">no LLM models</option>}
-            {llmModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
+          <Select
+            value={modelId}
+            onChange={setModelId}
+            placeholder="no LLM models"
+            className="mt-1"
+            options={llmModels.map((m) => ({ value: m.id, label: m.name }))}
+          />
         </label>
 
         <label className="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 px-3 py-2">
@@ -790,10 +794,12 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
         <div>
           <div className={label}>Persona</div>
           <div className="mt-1 grid grid-cols-[1fr_auto] gap-2">
-            <select value={personaId} onChange={(e) => applyPersona(e.target.value)} className={numField}>
-              <option value="">— none —</option>
-              {personas.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <Select
+              value={personaId}
+              onChange={applyPersona}
+              placeholder="— none —"
+              options={[{ value: "", label: "— none —" }, ...personas.map((p) => ({ value: p.id, label: p.name }))]}
+            />
             <button onClick={() => void deletePersona()} disabled={!personaId}
               className="rounded-md border border-red-400/25 px-2 py-1 text-xs text-red-300 hover:bg-red-400/10 disabled:opacity-30">
               Del

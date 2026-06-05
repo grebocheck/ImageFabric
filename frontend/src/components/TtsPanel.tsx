@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { Select } from "./Select";
 import type { TtsGenerateResult, TtsStatus } from "../types";
-
-const field = "w-full rounded-md bg-black/30 border border-white/10 px-2.5 py-1.5 text-sm outline-none focus:border-emerald-500";
 
 function size(bytes: number): string {
   if (!bytes) return "0 B";
@@ -68,18 +67,24 @@ export function TtsPanel() {
 
         <label>
           <div className="text-xs uppercase tracking-wide text-white/40">Model</div>
-          <select value={modelId} onChange={(e) => setModelId(e.target.value)} className={`${field} mt-1`}>
-            {models.length === 0 && <option value="">no TTS models</option>}
-            {models.map((m) => <option key={m.id} value={m.id}>{m.name} ({size(m.size_bytes)})</option>)}
-          </select>
+          <Select
+            value={modelId}
+            onChange={setModelId}
+            placeholder="no TTS models"
+            className="mt-1"
+            options={models.map((m) => ({ value: m.id, label: m.name, hint: size(m.size_bytes) }))}
+          />
         </label>
 
         <label>
           <div className="text-xs uppercase tracking-wide text-white/40">Vocoder</div>
-          <select value={vocoderId} onChange={(e) => setVocoderId(e.target.value)} className={`${field} mt-1`}>
-            <option value="">none</option>
-            {models.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-          </select>
+          <Select
+            value={vocoderId}
+            onChange={setVocoderId}
+            placeholder="none"
+            className="mt-1"
+            options={[{ value: "", label: "none" }, ...models.map((m) => ({ value: m.id, label: m.name }))]}
+          />
         </label>
 
         <label className="flex items-center gap-2 text-xs text-white/55">
