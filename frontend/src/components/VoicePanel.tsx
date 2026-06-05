@@ -19,6 +19,11 @@ const f0Options = [
 ];
 
 const sampleRates = [16000, 24000, 44100, 48000, 96000];
+const latencyPresets = [
+  { id: "fast", label: "Fast", chunk: 96, crossFade: 0.03, extra: 3 },
+  { id: "balanced", label: "Balanced", chunk: 133, crossFade: 0.05, extra: 5 },
+  { id: "quality", label: "Quality", chunk: 192, crossFade: 0.08, extra: 7 },
+];
 
 function size(bytes: number): string {
   if (!bytes) return "0 B";
@@ -53,20 +58,35 @@ function deviceHint(hostApi: string, rate: number | null): string {
   return [hostApi, rate ? `${rate / 1000}k` : ""].filter(Boolean).join(", ");
 }
 
+function meter(value: number): number {
+  return Math.round(Math.max(0, Math.min(1, value)) * 100);
+}
+
+function focusIsTextEntry(): boolean {
+  const el = document.activeElement;
+  if (!(el instanceof HTMLElement)) return false;
+  return ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || el.isContentEditable;
+}
+
 export function VoicePanel() {
   const [status, setStatus] = useState<VoiceStatus | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [modelId, setModelId] = useState("");
   const [pitch, setPitch] = useState(0);
+  const [formantShift, setFormantShift] = useState(0);
   const [indexRatio, setIndexRatio] = useState(1);
   const [protect, setProtect] = useState(0.5);
   const [f0Detector, setF0Detector] = useState("rmvpe_onnx");
+  const [passThrough, setPassThrough] = useState(false);
+  const [ptt, setPtt] = useState(false);
   const [inputDeviceId, setInputDeviceId] = useState(-1);
   const [outputDeviceId, setOutputDeviceId] = useState(-1);
   const [monitorDeviceId, setMonitorDeviceId] = useState(-1);
   const [sampleRate, setSampleRate] = useState(48000);
   const [readChunkSize, setReadChunkSize] = useState(133);
+  const [crossFadeOverlap, setCrossFadeOverlap] = useState(0.05);
+  const [extraConvert, setExtraConvert] = useState(5);
   const [inputGain, setInputGain] = useState(1);
   const [outputGain, setOutputGain] = useState(1);
   const [monitorGain, setMonitorGain] = useState(1);
@@ -83,26 +103,6 @@ export function VoicePanel() {
     }
   }, []);
 
-  useEffect(() => { void refresh(); }, [refresh]);
-
-  useEffect(() => {
-    if (!status) return;
-    setModelId((prev) => selectedModelId(status) || prev);
-    setPitch(num(status.settings.tran, 0));
-    setIndexRatio(num(status.settings.indexRatio, 1));
-    setProtect(num(status.settings.protect, 0.5));
-    const f0 = String(status.settings.f0Detector ?? "rmvpe_onnx");
-    setF0Detector(f0Options.some((o) => o.value === f0) ? f0 : "rmvpe_onnx");
-    setInputDeviceId(num(status.settings.serverInputDeviceId, -1));
-    setOutputDeviceId(num(status.settings.serverOutputDeviceId, -1));
-    setMonitorDeviceId(num(status.settings.serverMonitorDeviceId, -1));
-    setSampleRate(num(status.settings.serverAudioSampleRate, 48000));
-    setReadChunkSize(num(status.settings.serverReadChunkSize, 133));
-    setInputGain(num(status.settings.serverInputAudioGain, 1));
-    setOutputGain(num(status.settings.serverOutputAudioGain, 1));
-    setMonitorGain(num(status.settings.serverMonitorAudioGain, 1));
-  }, [status]);
-
   const models = status?.models ?? [];
   const inputDevices = status?.audio_devices.inputs ?? [];
   const outputDevices = status?.audio_devices.outputs ?? [];
@@ -112,17 +112,53 @@ export function VoicePanel() {
   const live = Boolean(status?.server_audio_enabled || status?.voice_lane_active);
   const streamStarted = Boolean(status?.server_audio_started);
 
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  useEffect(() => {
+    if (!status?.server_reachable || !live) return;
+    const id = window.setInterval(() => {
+      void refresh();
+    }, 750);
+    return () => window.clearInterval(id);
+  }, [live, refresh, status?.server_reachable]);
+
+  useEffect(() => {
+    if (!status) return;
+    setModelId((prev) => selectedModelId(status) || prev);
+    setPitch(num(status.settings.tran, 0));
+    setFormantShift(num(status.settings.formantShift, 0));
+    setIndexRatio(num(status.settings.indexRatio, 1));
+    setProtect(num(status.settings.protect, 0.5));
+    const f0 = String(status.settings.f0Detector ?? "rmvpe_onnx");
+    setF0Detector(f0Options.some((o) => o.value === f0) ? f0 : "rmvpe_onnx");
+    setPassThrough(Boolean(status.settings.passThrough));
+    setInputDeviceId(num(status.settings.serverInputDeviceId, -1));
+    setOutputDeviceId(num(status.settings.serverOutputDeviceId, -1));
+    setMonitorDeviceId(num(status.settings.serverMonitorDeviceId, -1));
+    setSampleRate(num(status.settings.serverAudioSampleRate, 48000));
+    setReadChunkSize(num(status.settings.serverReadChunkSize, 133));
+    setCrossFadeOverlap(num(status.settings.crossFadeOverlapSize, 0.05));
+    setExtraConvert(num(status.settings.extraConvertSize, 5));
+    setInputGain(num(status.settings.serverInputAudioGain, 1));
+    setOutputGain(num(status.settings.serverOutputAudioGain, 1));
+    setMonitorGain(num(status.settings.serverMonitorAudioGain, 1));
+  }, [status]);
+
   const body = (): VoiceSettingsUpdate => ({
     model_id: modelId || null,
     pitch,
+    formant_shift: formantShift,
     index_ratio: indexRatio,
     protect,
     f0_detector: f0Detector,
+    pass_through: passThrough,
     server_input_device_id: inputDeviceId,
     server_output_device_id: outputDeviceId,
     server_monitor_device_id: monitorDeviceId,
     server_audio_sample_rate: sampleRate,
     server_read_chunk_size: readChunkSize,
+    cross_fade_overlap_size: crossFadeOverlap,
+    extra_convert_size: extraConvert,
     server_input_gain: inputGain,
     server_output_gain: outputGain,
     server_monitor_gain: monitorGain,
@@ -166,12 +202,63 @@ export function VoicePanel() {
 
   const onApply = () => run("apply", () => api.voiceApplySettings(body()));
 
+  const applyPatch = (label: string, patch: VoiceSettingsUpdate) => run(label, () => api.voiceApplySettings({ ...body(), ...patch }));
+
   const onLive = (next: boolean) => run(next ? "live-on" : "live-off", () => (
     next ? api.voiceStartSession(body()) : api.voiceStopSession()
   ));
 
+  const onBypass = (next: boolean) => {
+    setPassThrough(next);
+    if (canReach) void applyPatch("bypass", { pass_through: next });
+  };
+
+  const onPtt = (next: boolean) => {
+    setPtt(next);
+    if (!canReach) return;
+    if (next) {
+      setPassThrough(true);
+      void applyPatch("ptt", { pass_through: true });
+    } else {
+      void applyPatch("ptt", { pass_through: passThrough });
+    }
+  };
+
+  const onPreset = (preset: (typeof latencyPresets)[number]) => {
+    setReadChunkSize(preset.chunk);
+    setCrossFadeOverlap(preset.crossFade);
+    setExtraConvert(preset.extra);
+    if (canReach) {
+      void applyPatch("preset", {
+        server_read_chunk_size: preset.chunk,
+        cross_fade_overlap_size: preset.crossFade,
+        extra_convert_size: preset.extra,
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (!ptt || !canReach) return;
+    const onDown = (event: KeyboardEvent) => {
+      if (event.code !== "Space" || focusIsTextEntry() || event.repeat) return;
+      event.preventDefault();
+      void api.voiceApplySettings({ pass_through: false }).then(setStatus).catch(() => {});
+    };
+    const onUp = (event: KeyboardEvent) => {
+      if (event.code !== "Space" || focusIsTextEntry()) return;
+      event.preventDefault();
+      void api.voiceApplySettings({ pass_through: true }).then(setStatus).catch(() => {});
+    };
+    window.addEventListener("keydown", onDown);
+    window.addEventListener("keyup", onUp);
+    return () => {
+      window.removeEventListener("keydown", onDown);
+      window.removeEventListener("keyup", onUp);
+    };
+  }, [canReach, ptt]);
+
   return (
-    <div className="mx-auto flex h-full max-w-3xl flex-col gap-4 overflow-y-auto p-1">
+    <div className="mx-auto flex h-full max-w-4xl flex-col gap-4 overflow-y-auto p-1">
       <header className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-white/85">Voice changer</h2>
@@ -255,6 +342,25 @@ export function VoicePanel() {
           </div>
         </div>
 
+        <div className="mb-4 grid gap-3 md:grid-cols-3">
+          <Meter label="Input" value={meter(status?.metrics.input_vu ?? 0)} />
+          <Meter label="Output" value={meter(status?.metrics.output_vu ?? 0)} />
+          <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="uppercase tracking-wide text-white/40">Latency</span>
+              <span className="font-mono text-white/65">
+                {status?.metrics.total_ms ?? status?.metrics.chunk_ms ?? 0} ms
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-sky-400/80"
+                style={{ width: `${Math.min(100, Math.max(6, Number(status?.metrics.total_ms ?? status?.metrics.chunk_ms ?? 0)))}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
         <div className="grid gap-3 md:grid-cols-2">
           <label>
             <div className="text-xs uppercase tracking-wide text-white/40">Voice</div>
@@ -286,6 +392,11 @@ export function VoicePanel() {
           </label>
 
           <div>
+            <div className="text-xs uppercase tracking-wide text-white/40">Formant</div>
+            <Slider value={formantShift} min={-2} max={2} step={0.01} onChange={setFormantShift} />
+          </div>
+
+          <div>
             <div className="text-xs uppercase tracking-wide text-white/40">Index ratio</div>
             <Slider value={indexRatio} min={0} max={1} step={0.01} onChange={setIndexRatio} />
           </div>
@@ -303,6 +414,31 @@ export function VoicePanel() {
             >
               {busy === "apply" ? "Applying..." : "Apply settings"}
             </button>
+          </div>
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 px-3 py-2">
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 text-xs text-white/55">
+              <Toggle checked={passThrough} onChange={onBypass} disabled={!canReach || Boolean(busy)} />
+              Bypass
+            </label>
+            <label className="flex items-center gap-2 text-xs text-white/55">
+              <Toggle checked={ptt} onChange={onPtt} disabled={!canReach} />
+              PTT
+            </label>
+          </div>
+          <div className="flex gap-1.5">
+            {latencyPresets.map((preset) => (
+              <button
+                key={preset.id}
+                onClick={() => onPreset(preset)}
+                disabled={!canReach || Boolean(busy)}
+                className="rounded border border-white/10 px-2 py-1 text-xs text-white/65 transition hover:bg-white/10 disabled:opacity-30"
+              >
+                {preset.label}
+              </button>
+            ))}
           </div>
         </div>
       </section>
@@ -403,6 +539,17 @@ export function VoicePanel() {
           </div>
         </div>
 
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <div>
+            <div className="text-xs uppercase tracking-wide text-white/40">Crossfade</div>
+            <Slider value={crossFadeOverlap} min={0} max={0.2} step={0.01} onChange={setCrossFadeOverlap} />
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-wide text-white/40">Extra buffer</div>
+            <Slider value={extraConvert} min={0} max={10} step={0.1} onChange={setExtraConvert} />
+          </div>
+        </div>
+
         <div className="mt-3 grid gap-3 md:grid-cols-3">
           <div>
             <div className="text-xs uppercase tracking-wide text-white/40">Input gain</div>
@@ -453,6 +600,20 @@ export function VoicePanel() {
           </ul>
         )}
       </section>
+    </div>
+  );
+}
+
+function Meter({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2">
+      <div className="flex items-center justify-between text-xs">
+        <span className="uppercase tracking-wide text-white/40">{label}</span>
+        <span className="font-mono text-white/65">{value}%</span>
+      </div>
+      <div className="mt-2 h-1.5 rounded-full bg-white/10">
+        <div className="h-full rounded-full bg-emerald-400/80 transition-[width]" style={{ width: `${value}%` }} />
+      </div>
     </div>
   );
 }

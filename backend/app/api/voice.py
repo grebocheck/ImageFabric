@@ -45,14 +45,18 @@ F0_DETECTORS = {
 class VoiceSettingsUpdate(BaseModel):
     model_id: str | None = None
     pitch: int | None = None
+    formant_shift: float | None = None
     index_ratio: float | None = None
     protect: float | None = None
     f0_detector: str | None = None
+    pass_through: bool | None = None
     server_input_device_id: int | None = None
     server_output_device_id: int | None = None
     server_monitor_device_id: int | None = None
     server_audio_sample_rate: int | None = None
     server_read_chunk_size: int | None = None
+    cross_fade_overlap_size: float | None = None
+    extra_convert_size: float | None = None
     server_input_gain: float | None = None
     server_output_gain: float | None = None
     server_monitor_gain: float | None = None
@@ -175,6 +179,7 @@ async def _wokada_update(key: str, value: Any) -> dict[str, Any]:
 def _settings_subset(raw: dict[str, Any]) -> dict[str, Any]:
     keys = (
         "modelSlotIndex",
+        "passThrough",
         "enableServerAudio",
         "serverAudioStated",
         "serverAudioSampleRate",
@@ -235,6 +240,50 @@ def _audio_devices(info: dict[str, Any] | None) -> dict[str, list[dict[str, Any]
     }
 
 
+def _as_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _number_list(value: Any) -> list[float]:
+    if not isinstance(value, list):
+        return []
+    out: list[float] = []
+    for item in value:
+        n = _as_float(item)
+        if n is not None:
+            out.append(n)
+    return out
+
+
+def _performance_metrics(raw: Any, settings_raw: dict[str, Any]) -> dict[str, Any]:
+    data = raw if isinstance(raw, dict) else {}
+    source = raw if isinstance(raw, list) else data.get("performance")
+    timings = _number_list(source)
+    volume = (
+        _as_float(data.get("volume"))
+        or _as_float(data.get("vol"))
+        or _as_float(data.get("inputVolume"))
+        or _as_float(data.get("input_volume"))
+        or 0.0
+    )
+    output_gain = _as_float(settings_raw.get("serverOutputAudioGain")) or 1.0
+    chunk = int(_as_float(settings_raw.get("serverReadChunkSize")) or 0)
+    sample_rate = int(_as_float(settings_raw.get("serverAudioSampleRate")) or 48_000)
+    chunk_ms = round((chunk * 128 / sample_rate) * 1000, 1) if chunk and sample_rate else None
+    return {
+        "volume": max(0.0, min(1.0, volume)),
+        "input_vu": max(0.0, min(1.0, volume)),
+        "output_vu": max(0.0, min(1.0, volume * output_gain)),
+        "timings_ms": timings,
+        "total_ms": round(sum(timings), 2) if timings else None,
+        "chunk_ms": chunk_ms,
+        "raw": raw,
+    }
+
+
 def _bool_setting(value: Any) -> bool:
     try:
         return bool(int(value))
@@ -262,6 +311,10 @@ def _clamp_ratio(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
 
 
+def _clamp_formant(value: float) -> float:
+    return max(-2.0, min(2.0, float(value)))
+
+
 def _clamp_device_id(value: int, *, allow_none: bool = False) -> int:
     n = int(value)
     if allow_none and n < 0:
@@ -281,6 +334,10 @@ def _clamp_gain(value: float) -> float:
     return max(0.0, min(4.0, float(value)))
 
 
+def _clamp_seconds(value: float, *, min_value: float, max_value: float) -> float:
+    return max(min_value, min(max_value, float(value)))
+
+
 def _validate_f0_detector(value: str) -> str:
     if value not in F0_DETECTORS:
         raise HTTPException(400, f"unsupported f0 detector: {value}")
@@ -293,12 +350,16 @@ async def _apply_voice_settings(body: VoiceSettingsUpdate) -> None:
         await _wokada_update("modelSlotIndex", slot)
     if body.pitch is not None:
         await _wokada_update("tran", _clamp_pitch(body.pitch))
+    if body.formant_shift is not None:
+        await _wokada_update("formantShift", _clamp_formant(body.formant_shift))
     if body.index_ratio is not None:
         await _wokada_update("indexRatio", _clamp_ratio(body.index_ratio))
     if body.protect is not None:
         await _wokada_update("protect", _clamp_ratio(body.protect))
     if body.f0_detector is not None:
         await _wokada_update("f0Detector", _validate_f0_detector(body.f0_detector))
+    if body.pass_through is not None:
+        await _wokada_update("passThrough", int(body.pass_through))
     if body.server_input_device_id is not None:
         await _wokada_update("serverInputDeviceId", _clamp_device_id(body.server_input_device_id))
     if body.server_output_device_id is not None:
@@ -312,6 +373,16 @@ async def _apply_voice_settings(body: VoiceSettingsUpdate) -> None:
         await _wokada_update("serverAudioSampleRate", _clamp_sample_rate(body.server_audio_sample_rate))
     if body.server_read_chunk_size is not None:
         await _wokada_update("serverReadChunkSize", _clamp_chunk_size(body.server_read_chunk_size))
+    if body.cross_fade_overlap_size is not None:
+        await _wokada_update(
+            "crossFadeOverlapSize",
+            _clamp_seconds(body.cross_fade_overlap_size, min_value=0.0, max_value=1.0),
+        )
+    if body.extra_convert_size is not None:
+        await _wokada_update(
+            "extraConvertSize",
+            _clamp_seconds(body.extra_convert_size, min_value=0.0, max_value=20.0),
+        )
     if body.server_input_gain is not None:
         await _wokada_update("serverInputAudioGain", _clamp_gain(body.server_input_gain))
     if body.server_output_gain is not None:
@@ -330,6 +401,7 @@ async def _status_payload() -> dict:
     server_audio_started = _bool_setting(settings_raw.get("serverAudioStated"))
     selected_slot = settings_raw.get("modelSlotIndex")
     devices = _audio_devices(info)
+    metrics = _performance_metrics(performance, settings_raw)
     return {
         "engine": "w-okada",
         "wokada_dir": str(settings.voice_wokada_dir),
@@ -348,6 +420,7 @@ async def _status_payload() -> dict:
         "device": settings.voice_device,
         "settings": _settings_subset(settings_raw),
         "performance": performance,
+        "metrics": metrics,
         "voice_lane_active": _session_active or (reachable and (server_audio_enabled or server_audio_started)),
         # w-okada is realtime: it's "ready" once its server is up.
         "ready": reachable,
