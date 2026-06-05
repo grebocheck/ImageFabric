@@ -509,11 +509,12 @@ few reliability bugs were fixed (committed to `main`):
   sample-rate combinations.
 - [~] **P6.4 — The UI (the differentiator).** In progress 2026-06-05: Voice tab
   now includes normalized live metrics from `/performance`, input/output VU
-  bars, pitch + formant + index/protect controls, latency↔quality presets
+  bars, a rolling waveform monitor, compact timing-stage breakdown, pitch +
+  formant + index/protect controls, latency/quality presets
   (chunk/crossfade/extra-buffer), and bypass / PTT controls driven through
-  w-okada's `passThrough` setting. *Remaining:* validate live meter values
-  against an actual audio stream, add a waveform monitor, and refine the
-  performance breakdown once the server is running.
+  w-okada's `passThrough` setting. *Remaining:* validate live meter/timing
+  values against an actual audio stream and tune the stage labels once the
+  server is running.
 
 P6 constraints:
 - Wrap w-okada (don't reinvent inference or the audio loop); our scope is
