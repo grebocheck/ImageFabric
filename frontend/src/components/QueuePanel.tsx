@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { api } from "../api/client";
+import { Badge } from "./Badge";
 import type { Job } from "../types";
 
 const statusColor: Record<string, string> = {
@@ -136,9 +137,7 @@ function JobCard({
     >
       <div className="flex min-w-0 items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <span className="rounded bg-violet-700/80 px-1.5 py-0.5 text-[10px] font-medium text-white">
-            {job.type}
-          </span>
+          <Badge color="bg-violet-700/80 text-white">{job.type}</Badge>
           <span className="min-w-0 truncate font-mono text-xs text-white/55" title={job.model_id}>{job.model_id}</span>
         </div>
         <span className={`shrink-0 text-xs ${statusColor[job.status]}`}>{job.status}</span>

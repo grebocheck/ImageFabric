@@ -4,6 +4,7 @@ import { useEvents } from "../api/useEvents";
 import type { BusEvent, ChatConversation, ChatConversationImport, ChatImportMessage, ChatMessage, ChatSendBody, LlmConfig, Model, Preset, PresetImportItem } from "../types";
 import { Select } from "./Select";
 import { AssistantContent } from "./Thinking";
+import { Toggle } from "./Toggle";
 
 const field = "w-full rounded-md bg-black/30 border border-white/10 px-2.5 py-1.5 text-sm outline-none focus:border-emerald-500";
 const numField = "w-full rounded-md bg-black/30 border border-white/10 px-2 py-1 text-xs outline-none focus:border-emerald-500";
@@ -701,33 +702,22 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
           />
         </label>
 
-        <label className="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 px-3 py-2">
+        <div className="flex items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 px-3 py-2">
           <span>
             <span className="block text-sm font-medium text-white/70">Image tool</span>
             <span className="block text-xs text-white/35">{pickImageModel(models)?.name ?? "no image model"}</span>
           </span>
-          <input
-            type="checkbox"
-            checked={imageTool}
-            disabled={!pickImageModel(models)}
-            onChange={(e) => setImageTool(e.target.checked)}
-            className="h-4 w-4 accent-emerald-500"
-          />
-        </label>
+          <Toggle checked={imageTool} disabled={!pickImageModel(models)} onChange={setImageTool} />
+        </div>
 
         <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2">
-          <label className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-3">
             <span>
               <span className="block text-sm font-medium text-white/70">Document tool</span>
               <span className="block text-xs text-white/35">model-driven RAG search</span>
             </span>
-            <input
-              type="checkbox"
-              checked={documentTool}
-              onChange={(e) => setDocumentTool(e.target.checked)}
-              className="h-4 w-4 accent-emerald-500"
-            />
-          </label>
+            <Toggle checked={documentTool} onChange={setDocumentTool} />
+          </div>
           {documentTool && (
             <label className="mt-2 block">
               <div className={label}>RAG top K</div>
