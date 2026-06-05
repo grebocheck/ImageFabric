@@ -489,10 +489,15 @@ few reliability bugs were fixed (committed to `main`):
   **gated** (503 until the server is up / API is driven). Smoke-tested live
   against the real install: `installed=true`, 1 voice (`chocola_yagiyukiv2`,
   RVC v2). *Remaining:* launch/manage the server + drive its conversion API.
-- [ ] **P6.2 — Drive the w-okada server.** Launch/stop `MMVCServerSIO.exe` as a
-  managed subprocess (like llama-server); select a model slot, set live params
-  (pitch / index-ratio / protect / f0 method), and start/stop conversion via its
-  API. Coordinate the GPU **voice lane** with the arbiter. Measure latency.
+- [~] **P6.2 — Drive the w-okada server.** In progress 2026-06-05: HFabric can
+  launch/stop `MMVCServerSIO.exe` as a managed subprocess, proxy w-okada's real
+  `GET /info`, `GET /performance`, and `POST /update_settings` API, select a
+  model slot, set live params (pitch / index-ratio / protect / f0 method), and
+  toggle `enableServerAudio` as a live session. The Worker now treats live voice
+  as a GPU **voice lane** and leaves queued image/LLM jobs parked while it is
+  active; starting a live session refuses if a GPU job is currently running and
+  frees any idle HFabric resident first. *Remaining:* device routing surface,
+  latency measurement, and richer w-okada performance display.
 - [ ] **P6.3 — Output routing into other apps.** Surface w-okada's
   input/output/monitor device selection (it already supports virtual cables) so
   the converted voice appears as a "microphone" in Discord/OBS/games; document

@@ -71,6 +71,10 @@ class Worker:
         """Wake the worker (call after enqueue/cancel)."""
         self._wakeup.set()
 
+    @property
+    def running_job_id(self) -> str | None:
+        return self._current_job_id
+
     def cancel_running(self, job_id: str) -> bool:
         """Signal the in-flight job to abort. Returns True if it is the one
         currently running (the worker then marks it cancelled as it unwinds)."""
@@ -108,6 +112,11 @@ class Worker:
 
     # --------------------------------------------------- phase-batch select
     async def _pick_next(self) -> JobSnapshot | None:
+        from ..api import voice  # noqa: PLC0415
+
+        if await voice.voice_lane_active():
+            return None
+
         async with session_scope() as s:
             rows = (await s.execute(
                 select(Job)

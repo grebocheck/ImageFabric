@@ -369,13 +369,29 @@ export interface VoiceStatus {
   wokada_dir: string;
   wokada_installed: boolean;
   executable: string | null;
+  stored_setting: string;
   model_dir: string;
   server_url: string;
   server_reachable: boolean;
+  server_running: boolean;
+  server_audio_enabled: boolean;
+  server_audio_started: boolean;
+  selected_model_slot: string | null;
   models: VoiceModel[];
   device: string;
+  settings: Record<string, unknown>;
+  performance: Record<string, unknown> | null;
+  voice_lane_active: boolean;
   ready: boolean;
   realtime: boolean;
+}
+
+export interface VoiceSettingsUpdate {
+  model_id?: string | null;
+  pitch?: number | null;
+  index_ratio?: number | null;
+  protect?: number | null;
+  f0_detector?: string | null;
 }
 
 export interface CodeFile {

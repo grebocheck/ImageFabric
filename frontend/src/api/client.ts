@@ -1,4 +1,4 @@
-import type { ChatConversation, ChatConversationDetail, ChatConversationImport, ChatImportResult, ChatSendBody, ChatSendResult, CodeFile, CodeFileContent, ImageItem, Job, JobCreate, JobType, LlmConfig, Lora, Model, Note, Preset, PresetImportItem, PresetImportResult, RagDocument, RagSearchResponse, RagStatus, RuntimeSettings, TranscriptionResult, TranscriptionStatus, TtsGenerateBody, TtsGenerateResult, TtsStatus, VisionResult, VisionStatus, VoiceStatus } from "../types";
+import type { ChatConversation, ChatConversationDetail, ChatConversationImport, ChatImportResult, ChatSendBody, ChatSendResult, CodeFile, CodeFileContent, ImageItem, Job, JobCreate, JobType, LlmConfig, Lora, Model, Note, Preset, PresetImportItem, PresetImportResult, RagDocument, RagSearchResponse, RagStatus, RuntimeSettings, TranscriptionResult, TranscriptionStatus, TtsGenerateBody, TtsGenerateResult, TtsStatus, VisionResult, VisionStatus, VoiceSettingsUpdate, VoiceStatus } from "../types";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -134,6 +134,13 @@ export const api = {
 
   visionStatus: () => fetch("/api/vision/status").then(j<VisionStatus>),
   voiceStatus: () => fetch("/api/voice/status").then(j<VoiceStatus>),
+  voiceStartServer: () => fetch("/api/voice/start", { method: "POST" }).then(j<{ running: boolean; already?: boolean; pid?: number }>),
+  voiceStopServer: () => fetch("/api/voice/stop", { method: "POST" }).then(j<{ stopped: boolean }>),
+  voiceApplySettings: (body: VoiceSettingsUpdate) =>
+    fetch("/api/voice/settings", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) }).then(j<VoiceStatus>),
+  voiceStartSession: (body: VoiceSettingsUpdate) =>
+    fetch("/api/voice/session/start", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) }).then(j<VoiceStatus>),
+  voiceStopSession: () => fetch("/api/voice/session/stop", { method: "POST" }).then(j<VoiceStatus>),
   analyzeVision: (body: { file: File; prompt: string; model_id: string; projector_id: string }) => {
     const form = new FormData();
     form.append("file", body.file);

@@ -55,6 +55,7 @@ async def lifespan(app: FastAPI):
     finally:
         mem_task.cancel()
         await embedding_service.stop()
+        voice.stop_server()
         await worker.stop()
 
 
