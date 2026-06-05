@@ -545,7 +545,8 @@ function modelMeta(model: Model): { label: string; hint?: string } {
   if (model.quant) tags.push(model.quant);
   if (model.estimated_vram_gb) {
     const prefix = model.slow ? ">=" : "~";
-    tags.push(`${prefix}${model.estimated_vram_gb.toFixed(1)} GB`);
+    const suffix = model.vram_measured ? " measured" : "";
+    tags.push(`${prefix}${model.estimated_vram_gb.toFixed(1)} GB${suffix}`);
   }
   if (model.slow) tags.push("slow");
   return { label: model.name, hint: tags.length ? tags.join(" / ") : undefined };

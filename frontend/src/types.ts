@@ -12,6 +12,7 @@ export interface Model {
   warm?: boolean;
   quant?: string | null;
   estimated_vram_gb?: number | null;
+  vram_measured?: boolean;
   slow?: boolean;
 }
 

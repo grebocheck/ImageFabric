@@ -176,6 +176,13 @@ class Settings(BaseSettings):
     # How often to broadcast a mem.status event (seconds).
     mem_poll_seconds: float = 3.0
 
+    # --- learned memory profiles (P7.2) ---
+    # Record each model's measured peak RAM/VRAM after a load and feed it back
+    # into the budget guard, replacing the static size*factor heuristic once a
+    # real measurement exists. Safety margin added on top of the measured RAM.
+    learn_memory_profiles: bool = True
+    learned_ram_margin_gb: float = 1.5
+
     # --- image generation defaults ---
     default_steps: int = 28
     default_guidance: float = 3.5  # FLUX-ish; SDXL overrides to ~6.0 at runtime

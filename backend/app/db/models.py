@@ -125,6 +125,27 @@ class Note(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 
 
+class ModelProfile(Base):
+    """Measured peak RAM/VRAM for a model, learned after real loads (P7.2).
+
+    Stores a conservative running *max* of the per-load measurements so the
+    budget guard can replace its static size*factor estimate with reality. RAM
+    is the incremental process RSS a load adds (the load starts from a clean
+    baseline because the arbiter unloads the previous model first); VRAM is the
+    process reserved VRAM after the load.
+    """
+
+    __tablename__ = "model_profiles"
+
+    model_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    family: Mapped[str] = mapped_column(String(16))
+    quant: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    ram_gb: Mapped[float | None] = mapped_column(Float, nullable=True)
+    vram_gb: Mapped[float | None] = mapped_column(Float, nullable=True)
+    samples: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class RagDocument(Base):
     __tablename__ = "rag_documents"
 

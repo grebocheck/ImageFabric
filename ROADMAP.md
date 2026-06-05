@@ -47,11 +47,15 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
   resumed). The Queue header shows blocking reasons (`ram_budget`/`voice_lane`);
   the System tab shows an Arbiter status panel. *Remaining:* per-job attribution on
   the exact queued card, and a keep-warm-eviction reason.
-- [ ] **P7.2 — Learned memory estimates.** Record actual peak RSS/VRAM per model
-  from `load_report` after each load and persist it (SQLite). Feed measured peaks
-  back into the `sysmon` budget check so the guard stops relying on the static
-  `size_bytes × factor` heuristic (the source of the FLUX.2 false-refusal bug).
-  Fall back to the static estimate only for never-loaded models.
+- [x] **P7.2 — Learned memory estimates.** After each real load the arbiter
+  records the model's measured RAM (incremental process RSS) and VRAM (process
+  reserved) from `load_report` into a `model_profiles` SQLite table (conservative
+  running max), primes a `sysmon` cache at startup, and the RAM-budget guard +
+  VRAM estimate now prefer the measurement (model-id keyed) over the static
+  `size_bytes × factor` heuristic — falling back only for never-loaded models.
+  Knobs: `HFAB_LEARN_MEMORY_PROFILES`, `HFAB_LEARNED_RAM_MARGIN_GB`. The Image
+  picker labels a learned VRAM figure "measured". *Remaining:* a UI list of
+  learned profiles and a reset control; LLM-subprocess VRAM (its report is `None`).
 - [x] **P7.3 — Memory-pressure timeline.** The System tab now keeps a rolling
   buffer of `mem.status` samples (last ~90) and draws a sparkline of VRAM-used and
   RAM-% with dashed **swap markers** where the resident model changed. *Remaining:*

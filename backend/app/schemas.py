@@ -21,6 +21,9 @@ class ModelOut(BaseModel):
     warm: bool = False
     quant: str | None = None
     estimated_vram_gb: float | None = None
+    # True when estimated_vram_gb comes from a real measurement (P7.2), not the
+    # static heuristic — the UI labels it "measured".
+    vram_measured: bool = False
     # True for models that are slow / memory-heavy on 16 GB (raw fp8 FLUX) so the
     # UI can warn before a click triggers a long, VRAM-overflowing run.
     slow: bool = False

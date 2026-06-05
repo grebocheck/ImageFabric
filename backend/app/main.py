@@ -33,9 +33,25 @@ async def _mem_monitor(bus: EventBus) -> None:
         await asyncio.sleep(settings.mem_poll_seconds)
 
 
+async def _prime_learned_profiles() -> None:
+    """Load persisted per-model memory measurements into the sysmon cache (P7.2)."""
+    from .db.session import session_scope
+    from .services import model_profile_service as mps
+
+    try:
+        async with session_scope() as s:
+            rows = await mps.load_all(s)
+        sysmon.prime_learned_profiles([
+            {"model_id": r.model_id, "ram_gb": r.ram_gb, "vram_gb": r.vram_gb} for r in rows
+        ])
+    except Exception:  # noqa: BLE001 - missing profiles must not block startup
+        pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await _prime_learned_profiles()
 
     registry = ModelRegistry()
     registry.scan()

@@ -16,6 +16,35 @@ from ..core.enums import ModelFamily
 _GB = 1e9
 _proc = psutil.Process()
 
+# Learned per-model memory measurements (model_id -> {"ram_gb", "vram_gb"}),
+# primed from the DB at startup and updated after each real load (P7.2). These
+# override the static size*factor estimates below when present.
+_learned: dict[str, dict[str, float]] = {}
+
+
+def set_learned_profile(model_id: str, *, ram_gb: float | None = None, vram_gb: float | None = None) -> None:
+    """Merge a measurement into the cache, keeping the conservative max."""
+    cur = _learned.setdefault(model_id, {})
+    if ram_gb is not None:
+        cur["ram_gb"] = max(cur.get("ram_gb", 0.0), ram_gb)
+    if vram_gb is not None:
+        cur["vram_gb"] = max(cur.get("vram_gb", 0.0), vram_gb)
+
+
+def get_learned_profile(model_id: str | None) -> dict[str, float] | None:
+    return _learned.get(model_id) if model_id else None
+
+
+def prime_learned_profiles(rows: list[dict]) -> None:
+    """Load DB-persisted profiles into the cache at startup."""
+    _learned.clear()
+    for row in rows:
+        set_learned_profile(row["model_id"], ram_gb=row.get("ram_gb"), vram_gb=row.get("vram_gb"))
+
+
+def learned_count() -> int:
+    return len(_learned)
+
 
 def ram_stats() -> dict:
     vm = psutil.virtual_memory()
@@ -80,8 +109,14 @@ def _is_nunchaku_quant(quant: str | None) -> bool:
     return bool(quant and quant.startswith("nunchaku"))
 
 
-def estimate_ram_need_gb(family: ModelFamily, size_bytes: int, quant: str | None) -> float:
-    """Rough CPU-RAM a load will need, by model kind."""
+def estimate_ram_need_gb(
+    family: ModelFamily, size_bytes: int, quant: str | None, model_id: str | None = None
+) -> float:
+    """Rough CPU-RAM a load will need, by model kind. A learned measurement (the
+    real peak RSS a load added) overrides the heuristic once we have one."""
+    prof = get_learned_profile(model_id)
+    if prof and prof.get("ram_gb"):
+        return prof["ram_gb"] + settings.learned_ram_margin_gb
     gb = size_bytes / _GB
     if family is ModelFamily.GGUF:
         return 2.0  # llama-server mmaps the gguf (disk-backed) -> low RSS
@@ -103,8 +138,14 @@ def estimate_ram_need_gb(family: ModelFamily, size_bytes: int, quant: str | None
     return gb * 1.3  # diffusers single-file materialization overhead
 
 
-def estimate_vram_need_gb(family: ModelFamily, size_bytes: int, quant: str | None) -> float | None:
-    """Rough resident VRAM estimate shown in the UI before the user queues work."""
+def estimate_vram_need_gb(
+    family: ModelFamily, size_bytes: int, quant: str | None, model_id: str | None = None
+) -> float | None:
+    """Rough resident VRAM estimate shown in the UI before the user queues work.
+    Prefers a learned measurement when available."""
+    prof = get_learned_profile(model_id)
+    if prof and prof.get("vram_gb"):
+        return round(prof["vram_gb"], 1)
     gb = size_bytes / _GB
     if family is ModelFamily.FLUX and _is_nunchaku_quant(quant):
         return 9.8  # M0 measured SVDQuant fp4 on RTX 5070 Ti
@@ -121,10 +162,12 @@ def estimate_vram_need_gb(family: ModelFamily, size_bytes: int, quant: str | Non
     return None
 
 
-def ram_budget(family: ModelFamily, size_bytes: int, quant: str | None) -> dict:
+def ram_budget(
+    family: ModelFamily, size_bytes: int, quant: str | None, model_id: str | None = None
+) -> dict:
     """Predicted-vs-available RAM decision for a load. Used both to refuse a load
     and to *explain* the refusal in the UI (arbiter transparency, ROADMAP P7.1)."""
-    need = estimate_ram_need_gb(family, size_bytes, quant)
+    need = estimate_ram_need_gb(family, size_bytes, quant, model_id)
     available = ram_stats()["available_gb"]
     headroom = settings.min_free_ram_gb
     return {
@@ -132,6 +175,7 @@ def ram_budget(family: ModelFamily, size_bytes: int, quant: str | None) -> dict:
         "need_gb": round(need, 1),
         "available_gb": available,
         "headroom_gb": round(headroom, 1),
+        "learned": bool(get_learned_profile(model_id) and get_learned_profile(model_id).get("ram_gb")),
     }
 
 
@@ -144,16 +188,20 @@ def ram_budget_message(decision: dict) -> str:
     )
 
 
-def check_ram_budget(family: ModelFamily, size_bytes: int, quant: str | None) -> None:
+def check_ram_budget(
+    family: ModelFamily, size_bytes: int, quant: str | None, model_id: str | None = None
+) -> None:
     """Raise a clear MemoryError if loading would risk the pagefile."""
-    decision = ram_budget(family, size_bytes, quant)
+    decision = ram_budget(family, size_bytes, quant, model_id)
     if not decision["ok"]:
         raise MemoryError(ram_budget_message(decision))
 
 
-def can_keep_warm(family: ModelFamily, size_bytes: int, quant: str | None) -> tuple[bool, str]:
+def can_keep_warm(
+    family: ModelFamily, size_bytes: int, quant: str | None, model_id: str | None = None
+) -> tuple[bool, str]:
     """Return whether parking a model in CPU RAM keeps enough free headroom."""
-    need = estimate_ram_need_gb(family, size_bytes, quant)
+    need = estimate_ram_need_gb(family, size_bytes, quant, model_id)
     available = ram_stats()["available_gb"]
     required = need + settings.keep_warm_min_available_ram_gb
     if available < required:

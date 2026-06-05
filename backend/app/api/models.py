@@ -28,10 +28,12 @@ async def list_models(
         warm = bool(existing and existing.warm)
         # raw fp8 FLUX (no quant backend) is the slow / high-mem path on 16 GB
         slow = d.family is ModelFamily.FLUX and d.quant is None
+        prof = sysmon.get_learned_profile(d.id)
         out.append(ModelOut(
             id=d.id, name=d.name, family=d.family, job_type=d.job_type,
             size_bytes=d.size_bytes, loaded=loaded, warm=warm, quant=d.quant,
-            estimated_vram_gb=sysmon.estimate_vram_need_gb(d.family, d.size_bytes, d.quant),
+            estimated_vram_gb=sysmon.estimate_vram_need_gb(d.family, d.size_bytes, d.quant, d.id),
+            vram_measured=bool(prof and prof.get("vram_gb")),
             slow=slow,
         ))
     return out
@@ -121,6 +123,7 @@ async def runtime_settings(
             "vision_models": len(list(settings.vision_models_dir.glob("*.gguf")))
             if settings.vision_models_dir.exists()
             else 0,
+            "learned_profiles": sysmon.learned_count(),
         },
         "gpu": arbiter.status(),
         "mem": sysmon.snapshot(),
