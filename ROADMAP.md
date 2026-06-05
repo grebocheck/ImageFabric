@@ -393,8 +393,10 @@ P3/UX notes:
   [Thinking.tsx](frontend/src/components/Thinking.tsx) parses `<think>…</think>`
   / `<thinking>` out of the assistant stream and renders a collapsible disclosure
   that auto-expands with a spinner while reasoning streams, then auto-collapses
-  once the answer begins. *Remaining:* gpt-oss Harmony `analysis`-channel parsing
-  (needs confirming how llama.cpp surfaces it) for models that don't use `<think>`.
+  once the answer begins. A richer pending-reply indicator replaced the old
+  empty-answer ellipsis on 2026-06-05. *Remaining:* gpt-oss Harmony
+  `analysis`-channel parsing (needs confirming how llama.cpp surfaces it) for
+  models that don't use `<think>`.
 - [x] **P5.C2 — Composer ergonomics.** Live token/context meter, tok/s + TTFT
   stats, Stop affordance and a busy/"generating" state were already in place; the
   auto-growing composer textarea (caps at 200 px, then scrolls) was added

@@ -218,6 +218,10 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
     () => promptHistory.filter((item) => item !== input.trim()).slice(0, 4),
     [input, promptHistory],
   );
+  const pendingAssistantId = useMemo(() => {
+    if (!busy) return null;
+    return [...messages].reverse().find((m) => m.role === "assistant")?.id ?? null;
+  }, [busy, messages]);
 
   const rememberPrompt = useCallback((content: string) => {
     const text = content.trim();
@@ -658,6 +662,7 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
                 onStartEdit={() => startEdit(m)}
                 onSaveEdit={() => void saveEdit()}
                 onCancelEdit={() => setEditingId(null)}
+                pending={m.id === pendingAssistantId}
               />
             ))
           )}
@@ -973,7 +978,7 @@ function NumOpt({ label: l, v, set, step }: { label: string; v: NumOrEmpty; set:
 }
 
 function Bubble({
-  msg, editing, editText, setEditText, onStartEdit, onSaveEdit, onCancelEdit,
+  msg, editing, editText, setEditText, onStartEdit, onSaveEdit, onCancelEdit, pending,
 }: {
   msg: ChatMessage;
   editing: boolean;
@@ -982,6 +987,7 @@ function Bubble({
   onStartEdit: () => void;
   onSaveEdit: () => void;
   onCancelEdit: () => void;
+  pending: boolean;
 }) {
   const isUser = msg.role === "user";
   const [copied, setCopied] = useState(false);
@@ -1015,7 +1021,7 @@ function Bubble({
         {isUser ? (
           <div className="whitespace-pre-wrap text-sm">{msg.content}</div>
         ) : (
-          <AssistantContent content={msg.content} />
+          <AssistantContent content={msg.content} pending={pending} />
         )}
         <div className="mt-1 flex gap-2 opacity-0 transition group-hover:opacity-100">
           <button onClick={copy} className="text-[11px] text-white/40 hover:text-white/80">{copied ? "copied" : "copy"}</button>

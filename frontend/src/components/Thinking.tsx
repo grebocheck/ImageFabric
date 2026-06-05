@@ -23,13 +23,41 @@ export function splitReasoning(content: string): { reasoning: string | null; ans
   return { reasoning: reasoning || null, answer: (before + after).trim(), active: false };
 }
 
-export function AssistantContent({ content }: { content: string }) {
+export function AssistantContent({ content, pending = false }: { content: string; pending?: boolean }) {
   const { reasoning, answer, active } = splitReasoning(content);
   return (
     <>
       {reasoning ? <Thinking reasoning={reasoning} active={active} /> : null}
-      {answer ? <Markdown content={answer} /> : (active ? null : <span className="text-sm text-white/30">…</span>)}
+      {answer ? <Markdown content={answer} /> : (!reasoning && (pending || active) ? <ThinkingPending active={active} /> : null)}
     </>
+  );
+}
+
+function ThinkingPending({ active }: { active: boolean }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex items-center gap-3 rounded-md border border-white/10 bg-black/20 px-3 py-2"
+    >
+      <span className="relative h-8 w-8 shrink-0">
+        <span className="absolute inset-0 rounded-full border border-accent/20" />
+        <span className="absolute inset-1 rounded-full border-2 border-white/10 border-t-accent animate-spin" />
+        <span className="absolute inset-[11px] rounded-full bg-accent/80 shadow-[0_0_14px_rgba(124,58,237,0.55)] animate-pulse" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-xs font-medium text-white/70">{active ? "Thinking" : "Preparing reply"}</span>
+        <span className="mt-1 flex items-end gap-1">
+          {[0, 1, 2, 3].map((i) => (
+            <span
+              key={i}
+              className="h-2 w-1 rounded-full bg-accent/70 animate-pulse"
+              style={{ animationDelay: `${i * 120}ms` }}
+            />
+          ))}
+        </span>
+      </span>
+    </div>
   );
 }
 
