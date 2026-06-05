@@ -1,106 +1,116 @@
-"""Local voice-changer workspace (P6, RVC w-okada-style).
+"""Local voice-changer workspace (P6, w-okada Voice Changer / MMVCServerSIO).
 
-P6.1 is the model-gated *shell*: it scans ``models/voice`` for RVC voice models
-(a ``.pth`` weight, optionally paired with a same-stem ``.index`` retrieval file)
-and reports whether the inference dependencies are importable. The actual RVC
-conversion engine is wired in a later step; until then ``/convert`` returns a
-clear 503 instead of pretending to work. Like the TTS/Vision tabs it is
-CPU-first by default so an offline conversion does not bypass the GPU arbiter.
+w-okada is a realtime voice-conversion **server**, not a pip import: HFabric
+detects it and builds UI on its API. P6.1 is the shell — it detects a local
+install (``MMVCServerSIO.exe``), reads its ``model_dir`` slots (each a folder
+with ``params.json`` + a ``.safetensors``/``.pth`` weight and an ``.index``),
+and probes whether the server is reachable. Driving the realtime conversion API
+is P6.2; until then ``/convert`` returns a clear error instead of faking a result.
 """
 
 from __future__ import annotations
 
-import importlib.util
-import re
-import uuid
+import json
 from pathlib import Path
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from ..config import settings
 
 router = APIRouter(prefix="/api/voice", tags=["voice"])
 
-ALLOWED_EXTS = {".wav", ".flac", ".mp3", ".m4a", ".ogg", ".opus"}
 
-# Candidate modules an RVC inference stack needs. We don't pin a single package
-# name yet (the engine is wired in P6.2); presence of torch + one RVC-style
-# module is what flips the tab from "shell" to "ready".
-_RVC_MODULES = ("rvc", "infer", "fairseq")
+def _exe() -> Path:
+    return settings.voice_wokada_dir / "MMVCServerSIO.exe"
 
 
-def _has(module: str) -> bool:
-    return importlib.util.find_spec(module) is not None
+def _wokada_installed() -> bool:
+    return _exe().exists()
 
 
-def _id(path: Path) -> str:
-    return re.sub(r"[^a-z0-9]+", "-", path.stem.lower()).strip("-") or uuid.uuid4().hex
+def _model_dir() -> Path:
+    return settings.voice_wokada_dir / "model_dir"
+
+
+def _dir_size(path: Path) -> int:
+    return sum(f.stat().st_size for f in path.glob("*") if f.is_file())
 
 
 def _models() -> list[dict[str, Any]]:
-    root = settings.voice_models_dir
+    """Read w-okada model slots (folders that carry a params.json)."""
+    root = _model_dir()
     if not root.exists():
         return []
     out: list[dict[str, Any]] = []
-    for path in sorted(root.glob("*.pth")):
-        if not path.is_file():
+    for slot in sorted(root.iterdir()):
+        params = slot / "params.json"
+        if not slot.is_dir() or not params.exists():
             continue
-        index = path.with_suffix(".index")
+        try:
+            meta = json.loads(params.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        index_file = str(meta.get("indexFile") or "")
         out.append({
-            "id": _id(path),
-            "name": path.stem,
-            "path": str(path),
-            "size_bytes": path.stat().st_size,
-            "has_index": index.exists(),
-            "index_path": str(index) if index.exists() else None,
+            "id": slot.name,
+            "slot": slot.name,
+            "name": str(meta.get("name") or slot.name),
+            "type": str(meta.get("voiceChangerType") or "RVC"),
+            "version": str(meta.get("version") or ""),
+            "sampling_rate": meta.get("samplingRate"),
+            "f0": bool(meta.get("f0", False)),
+            "has_index": bool(index_file) and (slot / index_file).exists(),
+            "size_bytes": _dir_size(slot),
         })
     return out
 
 
-def _engine() -> dict[str, bool]:
-    return {
-        "torch": _has("torch"),
-        "rvc": any(_has(m) for m in _RVC_MODULES),
-    }
-
-
-def _engine_ready(engine: dict[str, bool]) -> bool:
-    return engine["torch"] and engine["rvc"]
+async def _server_reachable() -> bool:
+    """True if the w-okada server answers at all (any HTTP response)."""
+    try:
+        async with httpx.AsyncClient(timeout=1.5) as client:
+            await client.get(settings.voice_wokada_url)
+        return True
+    except httpx.HTTPError:
+        return False
 
 
 @router.get("/status")
 async def voice_status() -> dict:
-    engine = _engine()
-    models = _models()
+    installed = _wokada_installed()
+    reachable = await _server_reachable()
     return {
-        "engine": "rvc",
-        "models_dir": str(settings.voice_models_dir),
-        "models": models,
-        "deps": engine,
+        "engine": "w-okada",
+        "wokada_dir": str(settings.voice_wokada_dir),
+        "wokada_installed": installed,
+        "executable": str(_exe()) if installed else None,
+        "model_dir": str(_model_dir()),
+        "server_url": settings.voice_wokada_url,
+        "server_reachable": reachable,
+        "models": _models(),
         "device": settings.voice_device,
-        "max_upload_mb": settings.voice_max_upload_mb,
-        # ready = an inference stack is importable AND at least one voice exists.
-        "ready": _engine_ready(engine) and bool(models),
-        "realtime": False,  # P6.2
+        # w-okada is realtime: it's "ready" once its server is up.
+        "ready": reachable,
+        "realtime": reachable,
     }
 
 
 @router.post("/convert")
 async def voice_convert(
-    file: UploadFile = File(...),  # noqa: ARG001 - accepted now, used once the engine is wired
+    file: UploadFile = File(...),  # noqa: ARG001 - accepted now, used once the API is driven
     model_id: str = Form(...),
     pitch: int = Form(0),  # noqa: ARG001
 ) -> dict:
-    """Offline file -> file conversion. Gated until the RVC engine is wired."""
-    model = next((m for m in _models() if m["id"] == model_id), None)
-    if not model:
+    """Placeholder. w-okada is a realtime engine; driving its conversion API is
+    wired in P6.2. Refuse clearly rather than fake a result."""
+    if not next((m for m in _models() if m["id"] == model_id), None):
         raise HTTPException(404, "voice model not found")
-    if not _engine_ready(_engine()):
+    if not await _server_reachable():
         raise HTTPException(
             503,
-            "RVC inference engine is not installed yet (P6.2). Drop an RVC .pth "
-            "(+ .index) into models/voice and install the engine to enable conversion.",
+            f"w-okada server is not reachable at {settings.voice_wokada_url}. "
+            "Start MMVCServerSIO, then retry.",
         )
-    # The real conversion is wired in P6.2; refuse rather than fake a result.
-    raise HTTPException(501, "voice conversion is not implemented yet (P6.2)")
+    raise HTTPException(501, "voice conversion via the w-okada API is not wired yet (P6.2)")

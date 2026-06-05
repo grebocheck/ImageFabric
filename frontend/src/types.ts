@@ -354,20 +354,26 @@ export interface VisionResult {
 
 export interface VoiceModel {
   id: string;
+  slot: string;
   name: string;
-  path: string;
-  size_bytes: number;
+  type: string;
+  version: string;
+  sampling_rate: number | null;
+  f0: boolean;
   has_index: boolean;
-  index_path: string | null;
+  size_bytes: number;
 }
 
 export interface VoiceStatus {
   engine: string;
-  models_dir: string;
+  wokada_dir: string;
+  wokada_installed: boolean;
+  executable: string | null;
+  model_dir: string;
+  server_url: string;
+  server_reachable: boolean;
   models: VoiceModel[];
-  deps: { torch: boolean; rvc: boolean };
   device: string;
-  max_upload_mb: number;
   ready: boolean;
   realtime: boolean;
 }

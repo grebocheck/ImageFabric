@@ -468,43 +468,45 @@ few reliability bugs were fixed (committed to `main`):
 > latency, dropout-free buffering, and voice quality must be **measured**, so it
 > is staged offline-first, like the TTS/Vision/Transcribe tabs were.
 
-**Architecture reality (read first):**
-- The low-latency **duplex audio loop must live in the backend** (Python +
-  WASAPI via `sounddevice`/`pyaudio`). A browser cannot do reliable low-latency
-  capture+playback or feed a virtual audio device. The React UI only sends
-  control/params and shows levels/status over the existing WebSocket.
-- A live session **pins the GPU**. RVC-class models are small (~100–300 MB) and
-  run comfortably, but realtime conversion holds VRAM continuously — it needs a
-  dedicated low-VRAM **voice lane** coordinated with the arbiter (pause/refuse
-  heavy image/LLM jobs while a session is live), plus a CPU fallback.
+**Architecture reality (decided: w-okada / MMVCServerSIO):**
+- w-okada **already owns the realtime duplex audio loop, device I/O, and
+  virtual-cable output**. We do **not** rebuild that in Python. HFabric detects
+  the local install, (later) launches `MMVCServerSIO.exe` as a managed
+  subprocess, and **drives its API** — building a cleaner control surface than
+  w-okada's own UI (the original gap the user hit).
+- A live session **pins the GPU** (w-okada uses it for inference). It needs a
+  **voice lane** coordinated with the arbiter — refuse/pause heavy image/LLM
+  jobs while a session is live; surface this in the UI.
+- Local install on this machine: `D:\MMVCServerSIO` (override with
+  `HFAB_VOICE_WOKADA_DIR`); models live in `<dir>\model_dir` as numbered slots
+  (each a `params.json` + `.safetensors`/`.pth` + `.index`).
 
-- [~] **P6.1 — Voice-model management + offline conversion.** Engine chosen:
-  **RVC (w-okada-style)**. Shipped 2026-06-05 (shell): a **Voice** tab
+- [~] **P6.1 — Voice detection shell.** Shipped 2026-06-05: a **Voice** tab
   ([VoicePanel.tsx](frontend/src/components/VoicePanel.tsx)) + `/api/voice/status`
-  that scans `models/voice` for RVC voices (`.pth` weight + optional same-stem
-  `.index`) and reports engine deps (`torch` / RVC stack); `/api/voice/convert`
-  is wired but **gated** (503 until the engine is installed), CPU-first via
-  `HFAB_VOICE_*`. Smoke-tested live (`ready=false`, no engine/models yet).
-  *Remaining:* install/wire the RVC inference stack and do real **file → file**
-  conversion to validate model/quality.
-- [ ] **P6.2 — Real-time streaming engine.** Backend duplex worker: rolling input
-  buffer → conversion model → crossfaded output, targeting **< ~150 ms** round
-  trip. Enumerate input/output devices; expose start/stop + live params over
-  `/api/voice/*` and the WebSocket. Measure latency and dropouts honestly.
-- [ ] **P6.3 — Output routing into other apps.** Detect a virtual audio cable
-  (VB-CABLE / VoiceMeeter) as an output so the converted voice appears as a
-  "microphone" in Discord/OBS/games. Document the one-time virtual-cable install.
-- [ ] **P6.4 — The UI (the differentiator).** Styled device pickers (reuse the
-  P5 `Select`), live input/output **VU meters**, pitch/formant sliders,
-  latency↔quality presets, a **bypass / push-to-talk hotkey**, and a
-  waveform/spectrogram monitor — the polish that existing voice changers lack.
+  that detects the w-okada install (`MMVCServerSIO.exe`), reads the `model_dir`
+  slots (name / type / version / f0 / index / size from each `params.json`), and
+  probes whether the server is reachable. `/api/voice/convert` is wired but
+  **gated** (503 until the server is up / API is driven). Smoke-tested live
+  against the real install: `installed=true`, 1 voice (`chocola_yagiyukiv2`,
+  RVC v2). *Remaining:* launch/manage the server + drive its conversion API.
+- [ ] **P6.2 — Drive the w-okada server.** Launch/stop `MMVCServerSIO.exe` as a
+  managed subprocess (like llama-server); select a model slot, set live params
+  (pitch / index-ratio / protect / f0 method), and start/stop conversion via its
+  API. Coordinate the GPU **voice lane** with the arbiter. Measure latency.
+- [ ] **P6.3 — Output routing into other apps.** Surface w-okada's
+  input/output/monitor device selection (it already supports virtual cables) so
+  the converted voice appears as a "microphone" in Discord/OBS/games; document
+  the one-time VB-CABLE/VoiceMeeter install.
+- [ ] **P6.4 — The UI (the differentiator).** A clean control surface on the
+  w-okada API: styled device pickers (reuse `Select`), live input/output **VU
+  meters**, pitch/formant sliders, latency↔quality presets, a **bypass /
+  push-to-talk hotkey**, and a waveform monitor — the polish w-okada's own UI lacks.
 
 P6 constraints:
-- Engine choice is open: wrap an existing realtime VC core (e.g. w-okada-style
-  RVC, or seed-vc for zero-shot/low-latency) rather than reinventing inference;
-  our scope is the integration + UI, not a new model.
-- Respect ROADMAP objective #1 (no pagefile thrash): the voice lane has its own
-  small RAM/VRAM budget checked by the same `sysmon` guard before a session starts.
+- Wrap w-okada (don't reinvent inference or the audio loop); our scope is
+  launch/management, the API integration, and a better UI.
+- Respect ROADMAP objective #1: the voice lane is checked against the same
+  `sysmon` VRAM/RAM budget before a session starts.
 
 ---
 

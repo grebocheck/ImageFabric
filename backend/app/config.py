@@ -92,6 +92,12 @@ class Settings(BaseSettings):
     voice_device: str = "cpu"
     voice_timeout_seconds: int = 600
     voice_max_upload_mb: int = 64
+    # w-okada Voice Changer (MMVCServerSIO) runs as its own realtime server; we
+    # detect it and build UI on its API rather than importing it. Override the
+    # install dir with HFAB_VOICE_WOKADA_DIR. Models live in <dir>/model_dir as
+    # numbered slots (each with params.json + a .safetensors/.pth + .index).
+    voice_wokada_dir: Path = Path("D:/MMVCServerSIO")
+    voice_wokada_url: str = "http://127.0.0.1:18888"
 
     # --- FLUX loading (M0 finding) ---
     # The local flux_dev is an fp8 all-in-one checkpoint; diffusers needs a
