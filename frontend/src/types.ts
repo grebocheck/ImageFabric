@@ -364,6 +364,16 @@ export interface VoiceModel {
   size_bytes: number;
 }
 
+export interface VoiceAudioDevice {
+  id: string;
+  index: number;
+  name: string;
+  host_api: string;
+  max_input_channels: number;
+  max_output_channels: number;
+  default_sample_rate: number | null;
+}
+
 export interface VoiceStatus {
   engine: string;
   wokada_dir: string;
@@ -378,6 +388,10 @@ export interface VoiceStatus {
   server_audio_started: boolean;
   selected_model_slot: string | null;
   models: VoiceModel[];
+  audio_devices: {
+    inputs: VoiceAudioDevice[];
+    outputs: VoiceAudioDevice[];
+  };
   device: string;
   settings: Record<string, unknown>;
   performance: Record<string, unknown> | null;
@@ -392,6 +406,14 @@ export interface VoiceSettingsUpdate {
   index_ratio?: number | null;
   protect?: number | null;
   f0_detector?: string | null;
+  server_input_device_id?: number | null;
+  server_output_device_id?: number | null;
+  server_monitor_device_id?: number | null;
+  server_audio_sample_rate?: number | null;
+  server_read_chunk_size?: number | null;
+  server_input_gain?: number | null;
+  server_output_gain?: number | null;
+  server_monitor_gain?: number | null;
 }
 
 export interface CodeFile {

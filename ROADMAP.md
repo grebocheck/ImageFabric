@@ -493,15 +493,20 @@ few reliability bugs were fixed (committed to `main`):
   launch/stop `MMVCServerSIO.exe` as a managed subprocess, proxy w-okada's real
   `GET /info`, `GET /performance`, and `POST /update_settings` API, select a
   model slot, set live params (pitch / index-ratio / protect / f0 method), and
-  toggle `enableServerAudio` as a live session. The Worker now treats live voice
-  as a GPU **voice lane** and leaves queued image/LLM jobs parked while it is
-  active; starting a live session refuses if a GPU job is currently running and
-  frees any idle HFabric resident first. *Remaining:* device routing surface,
-  latency measurement, and richer w-okada performance display.
-- [ ] **P6.3 — Output routing into other apps.** Surface w-okada's
-  input/output/monitor device selection (it already supports virtual cables) so
-  the converted voice appears as a "microphone" in Discord/OBS/games; document
-  the one-time VB-CABLE/VoiceMeeter install.
+  start/stop the real server-audio stream via `serverAudioStated` /
+  `enableServerAudio`. The Worker now treats live voice as a GPU **voice lane**
+  and leaves queued image/LLM jobs parked while it is active; starting a live
+  session refuses if a GPU job is currently running and frees any idle HFabric
+  resident first. *Remaining:* latency measurement and richer w-okada
+  performance display.
+- [~] **P6.3 — Output routing into other apps.** In progress 2026-06-05:
+  HFabric now normalizes w-okada's `serverAudioInputDevices` /
+  `serverAudioOutputDevices` from `/info` and surfaces input/output/monitor
+  device pickers, sample-rate, chunk-size, and gain controls in the Voice tab.
+  Added [voice-routing.md](docs/voice-routing.md) for the one-time
+  VB-CABLE/VoiceMeeter setup. *Remaining:* validate the selectors against a
+  live server/audio device session and add friendlier handling for unsupported
+  sample-rate combinations.
 - [ ] **P6.4 — The UI (the differentiator).** A clean control surface on the
   w-okada API: styled device pickers (reuse `Select`), live input/output **VU
   meters**, pitch/formant sliders, latency↔quality presets, a **bypass /

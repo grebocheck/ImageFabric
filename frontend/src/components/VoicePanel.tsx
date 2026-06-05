@@ -18,6 +18,8 @@ const f0Options = [
   { value: "fcpe_onnx", label: "FCPE ONNX" },
 ];
 
+const sampleRates = [16000, 24000, 44100, 48000, 96000];
+
 function size(bytes: number): string {
   if (!bytes) return "0 B";
   const gb = bytes / 1e9;
@@ -47,6 +49,10 @@ function perfSummary(performance: Record<string, unknown> | null): string {
   return entries.join(", ") || "available";
 }
 
+function deviceHint(hostApi: string, rate: number | null): string {
+  return [hostApi, rate ? `${rate / 1000}k` : ""].filter(Boolean).join(", ");
+}
+
 export function VoicePanel() {
   const [status, setStatus] = useState<VoiceStatus | null>(null);
   const [error, setError] = useState("");
@@ -56,6 +62,14 @@ export function VoicePanel() {
   const [indexRatio, setIndexRatio] = useState(1);
   const [protect, setProtect] = useState(0.5);
   const [f0Detector, setF0Detector] = useState("rmvpe_onnx");
+  const [inputDeviceId, setInputDeviceId] = useState(-1);
+  const [outputDeviceId, setOutputDeviceId] = useState(-1);
+  const [monitorDeviceId, setMonitorDeviceId] = useState(-1);
+  const [sampleRate, setSampleRate] = useState(48000);
+  const [readChunkSize, setReadChunkSize] = useState(133);
+  const [inputGain, setInputGain] = useState(1);
+  const [outputGain, setOutputGain] = useState(1);
+  const [monitorGain, setMonitorGain] = useState(1);
 
   const refresh = useCallback(async () => {
     try {
@@ -79,13 +93,24 @@ export function VoicePanel() {
     setProtect(num(status.settings.protect, 0.5));
     const f0 = String(status.settings.f0Detector ?? "rmvpe_onnx");
     setF0Detector(f0Options.some((o) => o.value === f0) ? f0 : "rmvpe_onnx");
+    setInputDeviceId(num(status.settings.serverInputDeviceId, -1));
+    setOutputDeviceId(num(status.settings.serverOutputDeviceId, -1));
+    setMonitorDeviceId(num(status.settings.serverMonitorDeviceId, -1));
+    setSampleRate(num(status.settings.serverAudioSampleRate, 48000));
+    setReadChunkSize(num(status.settings.serverReadChunkSize, 133));
+    setInputGain(num(status.settings.serverInputAudioGain, 1));
+    setOutputGain(num(status.settings.serverOutputAudioGain, 1));
+    setMonitorGain(num(status.settings.serverMonitorAudioGain, 1));
   }, [status]);
 
   const models = status?.models ?? [];
+  const inputDevices = status?.audio_devices.inputs ?? [];
+  const outputDevices = status?.audio_devices.outputs ?? [];
   const selected = useMemo(() => models.find((m) => m.id === modelId), [models, modelId]);
   const canReach = Boolean(status?.server_reachable);
   const canControl = canReach && models.length > 0 && !busy;
   const live = Boolean(status?.server_audio_enabled || status?.voice_lane_active);
+  const streamStarted = Boolean(status?.server_audio_started);
 
   const body = (): VoiceSettingsUpdate => ({
     model_id: modelId || null,
@@ -93,6 +118,14 @@ export function VoicePanel() {
     index_ratio: indexRatio,
     protect,
     f0_detector: f0Detector,
+    server_input_device_id: inputDeviceId,
+    server_output_device_id: outputDeviceId,
+    server_monitor_device_id: monitorDeviceId,
+    server_audio_sample_rate: sampleRate,
+    server_read_chunk_size: readChunkSize,
+    server_input_gain: inputGain,
+    server_output_gain: outputGain,
+    server_monitor_gain: monitorGain,
   });
 
   async function pollForServer() {
@@ -217,7 +250,7 @@ export function VoicePanel() {
             </div>
           </div>
           <div className="flex items-center gap-2 text-xs text-white/55">
-            <span>{live ? "Live on" : "Live off"}</span>
+            <span>{streamStarted ? "Stream on" : live ? "Live armed" : "Live off"}</span>
             <Toggle checked={live} onChange={onLive} disabled={!canControl && !live} />
           </div>
         </div>
@@ -270,6 +303,118 @@ export function VoicePanel() {
             >
               {busy === "apply" ? "Applying..." : "Apply settings"}
             </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-lg border border-white/10 bg-surface p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-medium uppercase tracking-wide text-white/40">Audio routing</div>
+            <div className="mt-1 text-xs text-white/35">
+              {canReach ? `${inputDevices.length} inputs / ${outputDevices.length} outputs` : "available after server start"}
+            </div>
+          </div>
+          <Badge color={streamStarted ? "bg-emerald-700/55 text-emerald-100" : "bg-white/10 text-white/55"}>
+            {streamStarted ? "streaming" : "stopped"}
+          </Badge>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <label>
+            <div className="text-xs uppercase tracking-wide text-white/40">Input</div>
+            <Select
+              value={String(inputDeviceId)}
+              onChange={(v) => setInputDeviceId(Number(v))}
+              placeholder="start server"
+              className="mt-1"
+              options={inputDevices.map((d) => ({
+                value: d.id,
+                label: d.name,
+                hint: deviceHint(d.host_api, d.default_sample_rate),
+              }))}
+            />
+          </label>
+
+          <label>
+            <div className="text-xs uppercase tracking-wide text-white/40">Output</div>
+            <Select
+              value={String(outputDeviceId)}
+              onChange={(v) => setOutputDeviceId(Number(v))}
+              placeholder="start server"
+              className="mt-1"
+              options={outputDevices.map((d) => ({
+                value: d.id,
+                label: d.name,
+                hint: deviceHint(d.host_api, d.default_sample_rate),
+              }))}
+            />
+          </label>
+
+          <label>
+            <div className="text-xs uppercase tracking-wide text-white/40">Monitor</div>
+            <Select
+              value={String(monitorDeviceId)}
+              onChange={(v) => setMonitorDeviceId(Number(v))}
+              className="mt-1"
+              options={[
+                { value: "-1", label: "none" },
+                ...outputDevices.map((d) => ({
+                  value: d.id,
+                  label: d.name,
+                  hint: deviceHint(d.host_api, d.default_sample_rate),
+                })),
+              ]}
+            />
+          </label>
+        </div>
+
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <label>
+            <div className="text-xs uppercase tracking-wide text-white/40">Sample rate</div>
+            <Select
+              value={String(sampleRate)}
+              onChange={(v) => setSampleRate(Number(v))}
+              className="mt-1"
+              options={sampleRates.map((rate) => ({ value: String(rate), label: `${rate} Hz` }))}
+            />
+          </label>
+
+          <label>
+            <div className="text-xs uppercase tracking-wide text-white/40">Chunk</div>
+            <input
+              type="number"
+              min={1}
+              max={1024}
+              value={readChunkSize}
+              onChange={(e) => setReadChunkSize(Number(e.target.value))}
+              className={`${field} mt-1`}
+            />
+          </label>
+
+          <div className="flex items-end">
+            <button
+              onClick={onApply}
+              disabled={!canReach || Boolean(busy)}
+              className="w-full rounded-md border border-white/15 px-3 py-1.5 text-sm font-medium text-white/75 transition hover:bg-white/10 hover:text-white disabled:opacity-30"
+            >
+              {busy === "apply" ? "Applying..." : "Apply routing"}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <div>
+            <div className="text-xs uppercase tracking-wide text-white/40">Input gain</div>
+            <Slider value={inputGain} min={0} max={2} step={0.01} onChange={setInputGain} />
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-wide text-white/40">Output gain</div>
+            <Slider value={outputGain} min={0} max={2} step={0.01} onChange={setOutputGain} />
+          </div>
+          <div>
+            <div className="text-xs uppercase tracking-wide text-white/40">Monitor gain</div>
+            <Slider value={monitorGain} min={0} max={2} step={0.01} onChange={setMonitorGain} />
           </div>
         </div>
       </section>

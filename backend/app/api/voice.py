@@ -48,6 +48,14 @@ class VoiceSettingsUpdate(BaseModel):
     index_ratio: float | None = None
     protect: float | None = None
     f0_detector: str | None = None
+    server_input_device_id: int | None = None
+    server_output_device_id: int | None = None
+    server_monitor_device_id: int | None = None
+    server_audio_sample_rate: int | None = None
+    server_read_chunk_size: int | None = None
+    server_input_gain: float | None = None
+    server_output_gain: float | None = None
+    server_monitor_gain: float | None = None
 
 
 def _server_running() -> bool:
@@ -169,6 +177,10 @@ def _settings_subset(raw: dict[str, Any]) -> dict[str, Any]:
         "modelSlotIndex",
         "enableServerAudio",
         "serverAudioStated",
+        "serverAudioSampleRate",
+        "serverInputAudioSampleRate",
+        "serverOutputAudioSampleRate",
+        "serverMonitorAudioSampleRate",
         "tran",
         "formantShift",
         "indexRatio",
@@ -187,6 +199,40 @@ def _settings_subset(raw: dict[str, Any]) -> dict[str, Any]:
         "outputSampleRate",
     )
     return {k: raw.get(k) for k in keys if k in raw}
+
+
+def _audio_device(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        index = int(raw.get("index"))
+    except (TypeError, ValueError):
+        return None
+    default_rate = raw.get("default_samplerate")
+    try:
+        default_rate = int(float(default_rate)) if default_rate is not None else None
+    except (TypeError, ValueError):
+        default_rate = None
+    return {
+        "id": str(index),
+        "index": index,
+        "name": str(raw.get("name") or f"Device {index}"),
+        "host_api": str(raw.get("hostAPI") or ""),
+        "max_input_channels": int(raw.get("maxInputChannels") or 0),
+        "max_output_channels": int(raw.get("maxOutputChannels") or 0),
+        "default_sample_rate": default_rate,
+    }
+
+
+def _audio_devices(info: dict[str, Any] | None) -> dict[str, list[dict[str, Any]]]:
+    if not info:
+        return {"inputs": [], "outputs": []}
+    inputs = [_audio_device(d) for d in list(info.get("serverAudioInputDevices") or [])]
+    outputs = [_audio_device(d) for d in list(info.get("serverAudioOutputDevices") or [])]
+    return {
+        "inputs": [d for d in inputs if d is not None],
+        "outputs": [d for d in outputs if d is not None],
+    }
 
 
 def _bool_setting(value: Any) -> bool:
@@ -216,6 +262,25 @@ def _clamp_ratio(value: float) -> float:
     return max(0.0, min(1.0, float(value)))
 
 
+def _clamp_device_id(value: int, *, allow_none: bool = False) -> int:
+    n = int(value)
+    if allow_none and n < 0:
+        return -1
+    return max(0, n)
+
+
+def _clamp_sample_rate(value: int) -> int:
+    return max(8_000, min(192_000, int(value)))
+
+
+def _clamp_chunk_size(value: int) -> int:
+    return max(1, min(1_024, int(value)))
+
+
+def _clamp_gain(value: float) -> float:
+    return max(0.0, min(4.0, float(value)))
+
+
 def _validate_f0_detector(value: str) -> str:
     if value not in F0_DETECTORS:
         raise HTTPException(400, f"unsupported f0 detector: {value}")
@@ -234,6 +299,25 @@ async def _apply_voice_settings(body: VoiceSettingsUpdate) -> None:
         await _wokada_update("protect", _clamp_ratio(body.protect))
     if body.f0_detector is not None:
         await _wokada_update("f0Detector", _validate_f0_detector(body.f0_detector))
+    if body.server_input_device_id is not None:
+        await _wokada_update("serverInputDeviceId", _clamp_device_id(body.server_input_device_id))
+    if body.server_output_device_id is not None:
+        await _wokada_update("serverOutputDeviceId", _clamp_device_id(body.server_output_device_id))
+    if body.server_monitor_device_id is not None:
+        await _wokada_update(
+            "serverMonitorDeviceId",
+            _clamp_device_id(body.server_monitor_device_id, allow_none=True),
+        )
+    if body.server_audio_sample_rate is not None:
+        await _wokada_update("serverAudioSampleRate", _clamp_sample_rate(body.server_audio_sample_rate))
+    if body.server_read_chunk_size is not None:
+        await _wokada_update("serverReadChunkSize", _clamp_chunk_size(body.server_read_chunk_size))
+    if body.server_input_gain is not None:
+        await _wokada_update("serverInputAudioGain", _clamp_gain(body.server_input_gain))
+    if body.server_output_gain is not None:
+        await _wokada_update("serverOutputAudioGain", _clamp_gain(body.server_output_gain))
+    if body.server_monitor_gain is not None:
+        await _wokada_update("serverMonitorAudioGain", _clamp_gain(body.server_monitor_gain))
 
 
 async def _status_payload() -> dict:
@@ -245,6 +329,7 @@ async def _status_payload() -> dict:
     server_audio_enabled = _bool_setting(settings_raw.get("enableServerAudio"))
     server_audio_started = _bool_setting(settings_raw.get("serverAudioStated"))
     selected_slot = settings_raw.get("modelSlotIndex")
+    devices = _audio_devices(info)
     return {
         "engine": "w-okada",
         "wokada_dir": str(settings.voice_wokada_dir),
@@ -259,10 +344,11 @@ async def _status_payload() -> dict:
         "server_audio_started": server_audio_started,
         "selected_model_slot": str(selected_slot) if selected_slot is not None else None,
         "models": _models(),
+        "audio_devices": devices,
         "device": settings.voice_device,
         "settings": _settings_subset(settings_raw),
         "performance": performance,
-        "voice_lane_active": _session_active or (reachable and server_audio_enabled),
+        "voice_lane_active": _session_active or (reachable and (server_audio_enabled or server_audio_started)),
         # w-okada is realtime: it's "ready" once its server is up.
         "ready": reachable,
         "realtime": reachable,
@@ -281,7 +367,7 @@ async def voice_lane_active() -> bool:
     info = await _wokada_get("/info", timeout=0.25)
     if not info:
         return False
-    return _bool_setting(info.get("enableServerAudio"))
+    return _bool_setting(info.get("enableServerAudio")) or _bool_setting(info.get("serverAudioStated"))
 
 
 @router.post("/start")
@@ -335,6 +421,7 @@ async def voice_session_start(
     await arbiter.free_all()
     await _apply_voice_settings(body)
     await _wokada_update("enableServerAudio", 1)
+    await _wokada_update("serverAudioStated", 1)
     _session_active = True
     return await _status_payload()
 
@@ -343,6 +430,7 @@ async def voice_session_start(
 async def voice_session_stop() -> dict:
     global _session_active
     if await _server_reachable():
+        await _wokada_update("serverAudioStated", 0)
         await _wokada_update("enableServerAudio", 0)
     _session_active = False
     return await _status_payload()
