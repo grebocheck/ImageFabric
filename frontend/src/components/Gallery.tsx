@@ -13,6 +13,15 @@ const DATE_RANGES = [
   { value: "30d", label: "Last 30 days" },
 ];
 
+const SIZE_FILTERS = [
+  { value: "", label: "All sizes" },
+  { value: "square", label: "Square" },
+  { value: "landscape", label: "Landscape" },
+  { value: "portrait", label: "Portrait" },
+  { value: "large", label: "1024+ px" },
+  { value: "small", label: "Under 1024" },
+];
+
 function rangeStart(id: string): string | undefined {
   const now = Date.now();
   if (id === "today") {
@@ -36,7 +45,7 @@ export function Gallery({
 }) {
   // `applied` is what actually drives fetching; `query` is the live input box.
   const [query, setQuery] = useState("");
-  const [applied, setApplied] = useState({ q: "", model: "", range: "all" });
+  const [applied, setApplied] = useState({ q: "", model: "", size: "", lora: "", range: "all" });
   const [items, setItems] = useState<ImageItem[]>([]);
   const [stats, setStats] = useState<ImageStats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -44,6 +53,7 @@ export function Gallery({
   const [openId, setOpenId] = useState<string | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [exporting, setExporting] = useState(false);
 
   const refreshStats = useCallback(() => {
     api.imageStats().then(setStats).catch(() => {});
@@ -54,6 +64,8 @@ export function Gallery({
       api.queryImages({
         q: applied.q || undefined,
         model: applied.model || undefined,
+        size: applied.size || undefined,
+        lora: applied.lora || undefined,
         date_from: rangeStart(applied.range),
         limit: PAGE,
         offset,
@@ -126,6 +138,26 @@ export function Gallery({
     toast.success(`Deleted ${ids.length} image${ids.length > 1 ? "s" : ""}`);
   };
 
+  const exportSelected = async () => {
+    const ids = [...selected];
+    if (!ids.length || exporting) return;
+    setExporting(true);
+    try {
+      const blob = await api.exportImages(ids);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `hfabric-images-${ids.length}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Exported ${ids.length} image${ids.length > 1 ? "s" : ""}`);
+    } catch {
+      toast.error("Could not export selected images");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const toggleSelected = (id: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -140,6 +172,11 @@ export function Gallery({
     { value: "", label: stats ? `All models (${stats.total})` : "All models" },
     ...(stats?.by_model ?? []).map((m) => ({ value: m.model, label: m.model, hint: String(m.count) })),
   ];
+  const loraOptions: SelectOption[] = [
+    { value: "", label: "All LoRAs" },
+    ...(stats?.by_lora ?? []).map((lora) => ({ value: lora.id, label: lora.name, hint: String(lora.count) })),
+  ];
+  const selectedLoraName = loraOptions.find((option) => option.value === applied.lora)?.label ?? applied.lora;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
@@ -174,6 +211,12 @@ export function Gallery({
           <div className="w-40">
             <Select value={applied.model} options={modelOptions} onChange={(v) => setApplied((a) => ({ ...a, model: v }))} />
           </div>
+          <div className="w-32">
+            <Select value={applied.size} options={SIZE_FILTERS} onChange={(v) => setApplied((a) => ({ ...a, size: v }))} />
+          </div>
+          <div className="w-40">
+            <Select value={applied.lora} options={loraOptions} onChange={(v) => setApplied((a) => ({ ...a, lora: v }))} />
+          </div>
           <div className="w-36">
             <Select value={applied.range} options={DATE_RANGES} onChange={(v) => setApplied((a) => ({ ...a, range: v }))} />
           </div>
@@ -191,10 +234,16 @@ export function Gallery({
         </div>
       </div>
 
-      {(applied.q || applied.model || applied.range !== "all") && (
+      {(applied.q || applied.model || applied.size || applied.lora || applied.range !== "all") && (
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
           {applied.q && <Chip onClear={() => { setQuery(""); setApplied((a) => ({ ...a, q: "" })); }}>“{applied.q}”</Chip>}
           {applied.model && <Chip onClear={() => setApplied((a) => ({ ...a, model: "" }))}>{applied.model}</Chip>}
+          {applied.size && (
+            <Chip onClear={() => setApplied((a) => ({ ...a, size: "" }))}>
+              {SIZE_FILTERS.find((r) => r.value === applied.size)?.label}
+            </Chip>
+          )}
+          {applied.lora && <Chip onClear={() => setApplied((a) => ({ ...a, lora: "" }))}>LoRA: {selectedLoraName}</Chip>}
           {applied.range !== "all" && (
             <Chip onClear={() => setApplied((a) => ({ ...a, range: "all" }))}>
               {DATE_RANGES.find((r) => r.value === applied.range)?.label}
@@ -213,6 +262,13 @@ export function Gallery({
             className="rounded border border-red-400/30 px-2 py-0.5 text-red-300 hover:bg-red-400/10 disabled:opacity-30"
           >
             Delete selected
+          </button>
+          <button
+            onClick={exportSelected}
+            disabled={!selected.size || exporting}
+            className="rounded border border-white/15 px-2 py-0.5 text-white/65 hover:bg-white/10 disabled:opacity-30"
+          >
+            {exporting ? "Exporting..." : "Export ZIP"}
           </button>
           <button onClick={() => setSelected(new Set())} disabled={!selected.size} className="rounded border border-white/15 px-2 py-0.5 text-white/60 hover:bg-white/10 disabled:opacity-30">
             Clear

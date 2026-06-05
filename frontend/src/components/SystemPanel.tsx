@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { StatusPill, WorkspaceHeader } from "./WorkspaceChrome";
-import type { ArbiterNote, GpuStatus, MemPoint, MemSnapshot, QueuePlan, RuntimeSettings } from "../types";
+import type { ArbiterNote, GpuStatus, ImageStats, MemPoint, MemSnapshot, QueuePlan, RuntimeSettings } from "../types";
 
 export function SystemPanel({
   gpu,
@@ -9,15 +9,18 @@ export function SystemPanel({
   history = [],
   note,
   queueKey = "",
+  imageSignal = 0,
 }: {
   gpu: GpuStatus;
   mem: MemSnapshot | null;
   history?: MemPoint[];
   note?: ArbiterNote | null;
   queueKey?: string;
+  imageSignal?: number;
 }) {
   const [settings, setSettings] = useState<RuntimeSettings | null>(null);
   const [plan, setPlan] = useState<QueuePlan | null>(null);
+  const [imageStats, setImageStats] = useState<ImageStats | null>(null);
 
   useEffect(() => {
     api.runtimeSettings().then(setSettings).catch(() => {});
@@ -27,6 +30,10 @@ export function SystemPanel({
   useEffect(() => {
     api.queuePlan().then(setPlan).catch(() => {});
   }, [queueKey, gpu.model_id]);
+
+  useEffect(() => {
+    api.imageStats().then(setImageStats).catch(() => {});
+  }, [imageSignal]);
 
   const ram = mem?.ram;
   const vram = mem?.vram;
@@ -48,7 +55,7 @@ export function SystemPanel({
 
       <MemoryTimeline history={history} />
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
         <Card title="VRAM" subtitle={vram ? `${vram.total_gb.toFixed(1)} GB total` : "no GPU telemetry"}>
           {vram ? (
             <>
@@ -77,6 +84,21 @@ export function SystemPanel({
             </>
           ) : (
             <div className="text-sm text-white/30">waiting for telemetry…</div>
+          )}
+        </Card>
+
+        <Card title="Generations" subtitle={imageStats ? `${imageStats.total} total` : "loading..."}>
+          {imageStats ? (
+            <>
+              <Rows rows={{
+                "Today": String(imageStats.today),
+                "All time": String(imageStats.total),
+                "Top model": imageStats.by_model[0]?.model ?? "-",
+              }} />
+              {imageStats.by_model.length ? <ModelCounts rows={imageStats.by_model.slice(0, 5)} /> : null}
+            </>
+          ) : (
+            <div className="text-sm text-white/30">waiting for generation counters...</div>
           )}
         </Card>
 
@@ -135,6 +157,25 @@ function Rows({ rows }: { rows: Record<string, string> }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+function ModelCounts({ rows }: { rows: ImageStats["by_model"] }) {
+  const max = Math.max(...rows.map((row) => row.count), 1);
+  return (
+    <div className="mt-3 space-y-2">
+      {rows.map((row) => (
+        <div key={row.model} className="min-w-0">
+          <div className="mb-1 flex items-center justify-between gap-2 text-[11px]">
+            <span className="min-w-0 truncate text-white/45" title={row.model}>{row.model}</span>
+            <span className="shrink-0 font-mono text-white/55">{row.count}</span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded bg-white/10">
+            <div className="h-full rounded bg-violet-500/75" style={{ width: `${Math.max(6, (row.count / max) * 100)}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 

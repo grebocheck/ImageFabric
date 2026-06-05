@@ -67,10 +67,12 @@ export const api = {
     const params = q?.trim() ? `?q=${encodeURIComponent(q.trim())}` : "";
     return fetch(`/api/images${params}`).then(j<ImageItem[]>);
   },
-  queryImages: (opts: { q?: string; model?: string; date_from?: string; date_to?: string; limit?: number; offset?: number } = {}) => {
+  queryImages: (opts: { q?: string; model?: string; size?: string; lora?: string; date_from?: string; date_to?: string; limit?: number; offset?: number } = {}) => {
     const p = new URLSearchParams();
     if (opts.q?.trim()) p.set("q", opts.q.trim());
     if (opts.model) p.set("model", opts.model);
+    if (opts.size) p.set("size", opts.size);
+    if (opts.lora) p.set("lora", opts.lora);
     if (opts.date_from) p.set("date_from", opts.date_from);
     if (opts.date_to) p.set("date_to", opts.date_to);
     if (opts.limit != null) p.set("limit", String(opts.limit));
@@ -79,6 +81,15 @@ export const api = {
     return fetch(`/api/images${qs ? `?${qs}` : ""}`).then(j<ImageItem[]>);
   },
   imageStats: () => fetch("/api/images/stats").then(j<ImageStats>),
+  exportImages: async (imageIds: string[]) => {
+    const res = await fetch("/api/images/export", {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ image_ids: imageIds }),
+    });
+    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+    return res.blob();
+  },
   deleteImage: (id: string) => fetch(`/api/images/${id}`, { method: "DELETE" }).then(j<{ deleted: string }>),
   revealImage: (id: string) => fetch(`/api/images/${id}/reveal`, { method: "POST" }).then(j),
   listPresets: () => fetch("/api/presets").then(j<Preset[]>),

@@ -15,8 +15,42 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT"
 
 PYBIN="$ROOT/.venv/bin/python"
-PORT=8260
-FPORT=5173
+
+load_env() {
+  local file="$1"
+  [ -f "$file" ] || return 0
+
+  local line key value
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="$(printf '%s' "$line" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    case "$line" in ""|\#*) continue ;; esac
+
+    key="${line%%=*}"
+    value="${line#*=}"
+    key="$(printf '%s' "$key" | tr -d '[:space:]')"
+    value="$(printf '%s' "$value" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+    [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+
+    if { [ "${value:0:1}" = '"' ] && [ "${value: -1}" = '"' ]; } ||
+       { [ "${value:0:1}" = "'" ] && [ "${value: -1}" = "'" ]; }; then
+      value="${value:1:${#value}-2}"
+    fi
+
+    if [ -z "${!key+x}" ]; then
+      export "$key=$value"
+    fi
+  done < "$file"
+}
+
+load_env "$ROOT/.env"
+
+PORT="${HFAB_PORT:-8260}"
+FPORT="${HFAB_FRONTEND_PORT:-5173}"
+BIND_HOST="${HFAB_HOST:-127.0.0.1}"
+LLAMA_PORT="${HFAB_LLAMA_PORT:-8261}"
+LLAMA_EMBED_PORT="${HFAB_LLAMA_EMBED_PORT:-8262}"
+export HFAB_HOST="$BIND_HOST"
+export HFAB_PORT="$PORT"
 
 if [ -t 1 ]; then
   C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_CYAN=$'\033[36m'; C_DIM=$'\033[2m'; C_RST=$'\033[0m'
@@ -28,6 +62,9 @@ have() { command -v "$1" >/dev/null 2>&1; }
 if [ "${1:-}" = "stub" ]; then
   export HFAB_STUB_MODE="true"
   printf '%s[mode] STUB — pipeline only, no GPU/ML stack%s\n' "$C_YELLOW" "$C_RST"
+elif [ "${HFAB_STUB_MODE:-false}" = "true" ] || [ "${HFAB_STUB_MODE:-false}" = "1" ]; then
+  export HFAB_STUB_MODE="true"
+  printf '%s[mode] STUB - pipeline only, no GPU/ML stack%s\n' "$C_YELLOW" "$C_RST"
 else
   export HFAB_STUB_MODE="false"
   printf '%s[mode] REAL — real models on the GPU (use "stub" for no-GPU mode)%s\n' "$C_GREEN" "$C_RST"
@@ -50,7 +87,7 @@ sweep_llama() {
     pkill -9 -f "$n" >/dev/null 2>&1 || true
   done
 }
-for p in "$PORT" 8261 8262 "$FPORT"; do free_port "$p"; done
+for p in "$PORT" "$LLAMA_PORT" "$LLAMA_EMBED_PORT" "$FPORT"; do free_port "$p"; done
 sweep_llama
 sleep 0.4
 
@@ -72,12 +109,12 @@ if [ ! -d "$ROOT/frontend/node_modules" ]; then
   ( cd frontend && npm install )
 fi
 
-printf '%s[run] backend  → http://127.0.0.1:%s%s\n' "$C_GREEN" "$PORT" "$C_RST"
+printf '%s[run] backend  → http://%s:%s%s\n' "$C_GREEN" "$BIND_HOST" "$PORT" "$C_RST"
 printf '%s[run] frontend → http://localhost:%s%s\n' "$C_GREEN" "$FPORT" "$C_RST"
 printf '%s[run] both run in THIS terminal; press Ctrl+C to stop.%s\n\n' "$C_YELLOW" "$C_RST"
 
 # --- start backend (background) ----------------------------------------------
-( cd backend && exec "$PYBIN" -m uvicorn app.main:app --host 127.0.0.1 --port "$PORT" ) &
+( cd backend && exec "$PYBIN" -m uvicorn app.main:app --host "$BIND_HOST" --port "$PORT" ) &
 BACKPID=$!
 
 cleanup() {

@@ -311,7 +311,7 @@ export default function App() {
       label: "System",
       render: () => (
         <main className="flex-1 overflow-hidden p-4">
-          <SystemPanel gpu={gpu} mem={mem} history={memHistory} note={arbiterNote} queueKey={queueKey} />
+          <SystemPanel gpu={gpu} mem={mem} history={memHistory} note={arbiterNote} queueKey={queueKey} imageSignal={imageEpoch} />
         </main>
       ),
     },

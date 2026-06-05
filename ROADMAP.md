@@ -75,21 +75,28 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
 - [x] **P8.1 — Persist the "Jobs" count.** `count` now saves into
   `hfabric.image.composer` with the rest of the composer state (it was the one
   control resetting to 1 on reload).
-- [ ] **P8.2 — Image prompt-history recall.** A recall control (↑/dropdown) over
-  recent image prompts, mirroring the LLM composer's history (shipped in P5.C2).
+- [x] **P8.2 — Image prompt-history recall.** The image composer now stores the
+  last 14 queued prompts in `hfabric.image.promptHistory` and exposes a compact
+  ↑ recall dropdown beside the Prompt label, mirroring the LLM composer's recent
+  prompt flow without taking over composer space.
 - [x] **P8.3 — Reproduce / vary from a result.** The History detail modal has
   *Edit in composer* (restore full params + LoRA + seed; model re-resolved by name)
   and *Variation* (same params, new seed). Wired through `ComposerApply` →
   `ImageComposer.apply`. *Remaining:* a quick "reproduce" action on the Images-tab
   `ResultPreview` card too.
-- [ ] **P8.4 — Model & LoRA picker as cards** (was P5.D1). Replace the `<select>`s
-  in `ImageComposer.tsx` with visual cards carrying quant / est-VRAM / "slow"
-  badges; LoRA picker with inline weight sliders and on/off toggles.
+- [x] **P8.4 — Model & LoRA picker as cards** (was P5.D1). `ImageComposer.tsx`
+  now uses visual model cards with family / quant / measured-VRAM / loaded / slow
+  badges, and the LoRA picker is a compatible-card list with on/off toggles plus
+  inline weight sliders.
 - [ ] **P8.5 — Text page comfort.** gpt-oss Harmony `analysis`-channel parsing for
   the Thinking panel (models that don't emit `<think>`); confirm how llama.cpp
   surfaces it first.
-- [ ] **P8.6 — In-dropdown search** for the shared `Select` (was the P5.C3
-  remainder) — matters once the model/LoRA/voice lists grow.
+- [x] **P8.6 — In-dropdown search** for the shared `Select` (was the P5.C3
+  remainder). Shared `Select` now shows a focused search field for longer option
+  lists, filters labels/hints, and preserves keyboard navigation.
+- [x] **P8.7 — Chat copy/selection polish.** LLM markdown no longer smooth-scrolls
+  on every streamed token while the user is selecting text; inline monospace and
+  code blocks copy on a simple click, while drag-selection still wins.
 
 ### P9 — History / browse rework (the dedicated viewer)
 
@@ -100,20 +107,22 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
 - [x] **P9.1 — Grid gallery + paging.** `Gallery.tsx` is now a responsive
   thumbnail grid (lazy `thumb_url`) that self-fetches `/api/images` with
   `limit`/`offset` and a **Load more** button; tiles open a detail modal.
-- [~] **P9.2 — Filters.** Model filter (from `/api/images/stats` counts) + date
-  range (today/7d/30d) + free-text prompt/seed search, shown as removable chips
-  and combinable. Backend: `model`/`date_from`/`date_to` query params on
-  `/api/images`. *Remaining:* size and LoRA filters; a true `family` column
+- [~] **P9.2 — Filters.** Model filter (from `/api/images/stats` counts), date
+  range (today/7d/30d), size/orientation, LoRA, and free-text prompt/seed search
+  are shown as removable chips and combinable. Backend: `model`/`size`/`lora`/
+  `date_from`/`date_to` query params on `/api/images`; `/api/images/stats` also
+  returns LoRA counts for the dropdown. *Remaining:* a true `family` column
   (today the snapshot only stores the model *name*).
 - [~] **P9.3 — Favorites, tags, delete.** Single delete (row + files) shipped via
   `DELETE /api/images/{id}`. *Remaining:* favorites + free-text tags (needs new
   SQLite columns) and filtering on them.
-- [~] **P9.4 — Bulk + export.** Multi-select **Select** mode with bulk delete
-  shipped; per-item PNG/JSON export + "Show in folder" kept in the detail modal.
-  *Remaining:* bulk export bundle.
+- [x] **P9.4 — Bulk + export.** Multi-select **Select** mode has bulk delete and
+  bulk ZIP export (`POST /api/images/export`, images + metadata JSON); per-item
+  PNG/JSON export + "Show in folder" remain in the detail modal.
 - [x] **P9.5 — Generation counters.** `/api/images/stats` returns total / today /
-  per-model counts; History header shows "N total · M today" and per-model counts
-  feed the model filter. *Remaining:* surface the same feed in the System tab.
+  per-model counts; History header shows "N total · M today", per-model counts
+  feed the model filter, and the System tab now surfaces the same counters with
+  a compact per-model breakdown.
 
 ### P6 — Real-time voice changer (in progress)
 

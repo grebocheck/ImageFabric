@@ -1,10 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
+import { Badge } from "./Badge";
 import { Select, type SelectOption } from "./Select";
 import { Slider } from "./Slider";
+import { Toggle } from "./Toggle";
 import type { ComposerApply, Lora, Model, Preset } from "../types";
 
 const STORE_KEY = "hfabric.image.composer";
+const PROMPT_HISTORY_KEY = "hfabric.image.promptHistory";
+const promptHistoryLimit = 14;
 
 type LoraSelection = { id: string; weight: number };
 type SavedComposer = {
@@ -51,6 +55,15 @@ function readSaved(): SavedComposer {
   }
 }
 
+function loadPromptHistory(): string[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PROMPT_HISTORY_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string").slice(0, promptHistoryLimit) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function ImageComposer({
   models,
   loras,
@@ -82,12 +95,13 @@ export function ImageComposer({
   const [seed, setSeed] = useState(saved.seed ?? -1);
   const [batch, setBatch] = useState(saved.batch ?? 1);
   const [selectedLoras, setSelectedLoras] = useState<LoraSelection[]>(saved.selectedLoras ?? []);
-  const [loraId, setLoraId] = useState("");
-  const [loraWeight, setLoraWeight] = useState(1);
   const [count, setCount] = useState(saved.count ?? 1);
   const [presetId, setPresetId] = useState(saved.presetId ?? "");
   const [presetName, setPresetName] = useState("");
   const [presetError, setPresetError] = useState("");
+  const [promptHistory, setPromptHistory] = useState<string[]>(() => loadPromptHistory());
+  const [promptHistoryOpen, setPromptHistoryOpen] = useState(false);
+  const promptHistoryRef = useRef<HTMLDivElement>(null);
 
   const selectedImgModel = imgModels.find((m) => m.id === imgModel);
   const selectedFamily = selectedImgModel?.family;
@@ -141,9 +155,16 @@ export function ImageComposer({
     loras: selectedLoras.length ? selectedLoras.map(({ id, weight }) => ({ id, weight })) : undefined,
   });
 
+  const rememberPrompt = useCallback((content: string) => {
+    const text = content.trim();
+    if (!text) return;
+    setPromptHistory((prev) => [text, ...prev.filter((item) => item !== text)].slice(0, promptHistoryLimit));
+  }, []);
+
   const generate = async () => {
     if (!imgModel || !promptDraft.trim()) return;
     const params = imageParams();
+    rememberPrompt(params.prompt);
     await api.createJobs(Array.from({ length: count }, () => ({ type: "image" as const, model_id: imgModel, params })));
   };
 
@@ -159,21 +180,17 @@ export function ImageComposer({
     }
   };
 
-  const addLora = () => {
-    if (!loraId || selectedLoras.some((lora) => lora.id === loraId)) return;
-    const lora = compatibleLoras.find((item) => item.id === loraId);
-    if (!lora) return;
-    setSelectedLoras((current) => [...current, { id: lora.id, weight: loraWeight }]);
-    setLoraId("");
-    setLoraWeight(1);
-  };
-
   const updateLoraWeight = (id: string, weight: number) => {
     setSelectedLoras((current) => current.map((lora) => lora.id === id ? { ...lora, weight } : lora));
   };
 
-  const removeLora = (id: string) => {
-    setSelectedLoras((current) => current.filter((lora) => lora.id !== id));
+  const toggleLora = (lora: Lora, enabled: boolean) => {
+    setSelectedLoras((current) => {
+      const exists = current.some((selected) => selected.id === lora.id);
+      if (enabled && !exists) return [...current, { id: lora.id, weight: 1 }];
+      if (!enabled) return current.filter((selected) => selected.id !== lora.id);
+      return current;
+    });
   };
 
   const savePreset = async () => {
@@ -220,6 +237,25 @@ export function ImageComposer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apply]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(PROMPT_HISTORY_KEY, JSON.stringify(promptHistory));
+    } catch {
+      // Private-mode or quota errors should not break recall.
+    }
+  }, [promptHistory]);
+
+  useEffect(() => {
+    if (!promptHistoryOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (promptHistoryRef.current && !promptHistoryRef.current.contains(e.target as Node)) {
+        setPromptHistoryOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [promptHistoryOpen]);
+
   const deletePreset = async () => {
     if (!presetId) return;
     setPresetError("");
@@ -232,14 +268,6 @@ export function ImageComposer({
     }
   };
 
-  const modelOptions: SelectOption[] = imgModels.map((m) => {
-    const meta = modelMeta(m);
-    return { value: m.id, label: meta.label, hint: meta.hint };
-  });
-  const loraOptions: SelectOption[] = [
-    { value: "", label: "none" },
-    ...compatibleLoras.map((lora) => ({ value: lora.id, label: lora.name, hint: loraHint(lora) })),
-  ];
   const presetOptions: SelectOption[] = [
     { value: "", label: "unsaved" },
     ...imagePresets.map((p) => ({ value: p.id, label: p.name })),
@@ -249,6 +277,7 @@ export function ImageComposer({
   const activeRatio = RATIOS.find((r) => isRatio(width, height, r.w, r.h))?.label ?? "custom";
   const promptChars = promptDraft.trim().length;
   const queueLabel = count > 1 ? `Queue ${count} jobs` : "Queue generation";
+  const visiblePromptHistory = promptHistory.filter((item) => item !== promptDraft.trim()).slice(0, 8);
 
   return (
     <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-white/10 bg-surface max-[860px]:mb-4 max-[860px]:h-[760px]">
@@ -268,7 +297,44 @@ export function ImageComposer({
         <section className={section}>
           <div className="flex items-center justify-between">
             <label htmlFor="image-prompt" className={label}>Prompt</label>
-            <span className="text-[11px] text-white/30">{promptChars ? `${promptChars} chars` : "empty"}</span>
+            <div className="flex items-center gap-2">
+              <div ref={promptHistoryRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setPromptHistoryOpen((open) => !open)}
+                  disabled={visiblePromptHistory.length === 0}
+                  title={visiblePromptHistory.length ? "Recall recent prompt" : "No recent image prompts"}
+                  aria-label="Recall recent image prompt"
+                  aria-expanded={promptHistoryOpen}
+                  className="h-6 w-6 rounded-md border border-white/15 text-sm leading-none text-white/55 transition hover:bg-white/10 hover:text-white disabled:opacity-25"
+                >
+                  ↑
+                </button>
+                {promptHistoryOpen ? (
+                  <div className="absolute right-0 z-30 mt-1 w-72 overflow-hidden rounded-md border border-white/10 bg-surface-2 py-1 shadow-xl shadow-black/60">
+                    {visiblePromptHistory.length === 0 ? (
+                      <div className="px-2.5 py-1.5 text-sm text-white/30">no recent prompts</div>
+                    ) : (
+                      visiblePromptHistory.map((prompt) => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          onClick={() => {
+                            setPromptDraft(prompt);
+                            setPromptHistoryOpen(false);
+                          }}
+                          className="block w-full truncate px-2.5 py-1.5 text-left text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
+                          title={prompt}
+                        >
+                          {prompt}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                ) : null}
+              </div>
+              <span className="text-[11px] text-white/30">{promptChars ? `${promptChars} chars` : "empty"}</span>
+            </div>
           </div>
           <textarea
             id="image-prompt"
@@ -291,7 +357,20 @@ export function ImageComposer({
 
         <section className={section}>
           <div className={label}>Model</div>
-          <Select value={imgModel} options={modelOptions} onChange={setImgModel} placeholder="pick a model..." className="mt-1.5" />
+          <div className="mt-1.5 grid gap-2">
+            {imgModels.length === 0 ? (
+              <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/35">no image models</div>
+            ) : (
+              imgModels.map((model) => (
+                <ModelCard
+                  key={model.id}
+                  model={model}
+                  active={model.id === imgModel}
+                  onSelect={() => setImgModel(model.id)}
+                />
+              ))
+            )}
+          </div>
           {selectedImgModel?.slow ? (
             <Notice tone="amber">
               Raw FLUX fp8 is slow and high-memory on 16 GB VRAM. Prefer a nunchaku FLUX entry when available.
@@ -346,55 +425,30 @@ export function ImageComposer({
         </section>
 
         <section className={section}>
-          <div className={label}>LoRA</div>
-          <div className="mt-1.5 grid grid-cols-[minmax(0,1fr)_72px_auto] gap-2">
-            <Select value={loraId} options={loraOptions} onChange={setLoraId} placeholder="none" />
-            <input
-              type="number"
-              value={loraWeight}
-              min={-2}
-              max={2}
-              step={0.05}
-              onChange={(e) => setLoraWeight(Number(e.target.value))}
-              className={field}
-              aria-label="LoRA weight"
-            />
-            <button
-              onClick={addLora}
-              disabled={!loraId || selectedLoras.some((lora) => lora.id === loraId)}
-              className={subtleButton}
-            >
-              Add
-            </button>
+          <div className="flex items-center justify-between gap-2">
+            <div className={label}>LoRA</div>
+            <span className="text-[11px] text-white/35">{selectedLoras.length ? `${selectedLoras.length} active` : "none active"}</span>
           </div>
-          {selectedLoras.length ? (
-            <div className="mt-2 flex flex-col gap-1.5">
-              {selectedLoras.map((selected) => {
-                const lora = loras.find((item) => item.id === selected.id);
+          {compatibleLoras.length ? (
+            <div className="mt-1.5 flex max-h-64 flex-col gap-2 overflow-y-auto pr-1">
+              {compatibleLoras.map((lora) => {
+                const selected = selectedLoras.find((item) => item.id === lora.id);
                 return (
-                  <div key={selected.id} className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0 truncate text-xs text-white/75" title={lora?.name ?? selected.id}>{lora?.name ?? selected.id}</div>
-                      <button
-                        onClick={() => removeLora(selected.id)}
-                        className="h-5 w-5 shrink-0 rounded border border-white/15 text-xs text-white/50 hover:bg-white/10 hover:text-white"
-                        title="Remove LoRA"
-                      >
-                        x
-                      </button>
-                    </div>
-                    <Slider
-                      value={selected.weight}
-                      min={-2}
-                      max={2}
-                      step={0.05}
-                      onChange={(v) => updateLoraWeight(selected.id, v)}
-                    />
-                  </div>
+                  <LoraCard
+                    key={lora.id}
+                    lora={lora}
+                    selected={selected}
+                    onToggle={(enabled) => toggleLora(lora, enabled)}
+                    onWeight={(weight) => updateLoraWeight(lora.id, weight)}
+                  />
                 );
               })}
             </div>
-          ) : null}
+          ) : (
+            <div className="mt-1.5 rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/35">
+              {selectedImgModel ? "no compatible LoRA files" : "pick an image model first"}
+            </div>
+          )}
         </section>
 
         <section className={section}>
@@ -461,6 +515,82 @@ function Notice({ tone, children }: { tone: "amber" | "emerald" | "sky"; childre
   return <div className={`mt-2 rounded-md border px-2.5 py-2 text-xs leading-5 ${classes[tone]}`}>{children}</div>;
 }
 
+function ModelCard({ model, active, onSelect }: { model: Model; active: boolean; onSelect: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onSelect}
+      className={`min-w-0 rounded-md border px-3 py-2 text-left transition ${
+        active
+          ? "border-violet-400/60 bg-violet-500/15 shadow-sm shadow-violet-950/40"
+          : "border-white/10 bg-black/20 hover:border-white/20 hover:bg-white/[0.06]"
+      }`}
+    >
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-medium text-white/85" title={model.name}>{model.name}</div>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            <Badge color={familyColor(model.family)}>{model.family}</Badge>
+            {model.quant ? <Badge>{model.quant}</Badge> : null}
+            {model.loaded ? <Badge color="bg-emerald-700/55 text-emerald-100">loaded</Badge> : model.warm ? <Badge color="bg-sky-700/50 text-sky-100">warm</Badge> : null}
+          </div>
+        </div>
+        {model.estimated_vram_gb ? (
+          <div className="shrink-0 text-right">
+            <div className="font-mono text-xs text-white/70">{formatVram(model)}</div>
+            {model.vram_measured ? <div className="mt-0.5 text-[10px] text-white/35">measured</div> : null}
+          </div>
+        ) : null}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {model.slow ? <Badge color="bg-amber-600/35 text-amber-100">slow</Badge> : null}
+        {isNunchaku(model) ? <Badge color="bg-emerald-700/55 text-emerald-100">fast path</Badge> : null}
+        {active ? <Badge color="bg-violet-600/45 text-violet-100">selected</Badge> : null}
+      </div>
+    </button>
+  );
+}
+
+function LoraCard({
+  lora,
+  selected,
+  onToggle,
+  onWeight,
+}: {
+  lora: Lora;
+  selected?: LoraSelection;
+  onToggle: (enabled: boolean) => void;
+  onWeight: (weight: number) => void;
+}) {
+  const enabled = Boolean(selected);
+  const weight = selected?.weight ?? 1;
+
+  return (
+    <div className={`rounded-md border px-2.5 py-2 transition ${
+      enabled ? "border-violet-400/45 bg-violet-500/10" : "border-white/10 bg-black/20"
+    }`}>
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-xs font-medium text-white/75" title={lora.name}>{lora.name}</div>
+          <div className="mt-1 flex flex-wrap gap-1.5">
+            <Badge color={familyColor(lora.family ?? "unknown")}>{lora.family ?? "any"}</Badge>
+            <Badge>{formatSize(lora.size_bytes)}</Badge>
+          </div>
+        </div>
+        <Toggle checked={enabled} onChange={onToggle} ariaLabel={`Toggle ${lora.name}`} />
+      </div>
+      <div className={`mt-2 ${enabled ? "" : "pointer-events-none opacity-35"}`}>
+        <div className="mb-1 flex items-center justify-between text-[11px] text-white/40">
+          <span>Weight</span>
+          <span className="font-mono text-white/60">{weight.toFixed(2)}</span>
+        </div>
+        <Slider value={weight} min={-2} max={2} step={0.05} onChange={onWeight} />
+      </div>
+    </div>
+  );
+}
+
 function Num({ label: l, v, set, step = 1 }: { label: string; v: number; set: (n: number) => void; step?: number }) {
   return (
     <label className="block">
@@ -507,14 +637,24 @@ function isLoraCompatible(lora: Lora, model: Model | undefined): boolean {
   return !model || !lora.family || lora.family === model.family;
 }
 
-function loraHint(lora: Lora): string {
-  return [lora.family ?? "unknown", formatSize(lora.size_bytes)].filter(Boolean).join(" / ");
-}
-
 function formatSize(bytes: number): string {
   if (!bytes) return "";
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
   return `${Math.max(1, Math.round(bytes / 1024 ** 2))} MB`;
+}
+
+function formatVram(model: Model): string {
+  if (!model.estimated_vram_gb) return "";
+  const prefix = model.slow ? ">=" : "~";
+  return `${prefix}${model.estimated_vram_gb.toFixed(1)} GB`;
+}
+
+function familyColor(family: string): string {
+  if (family === "flux2") return "bg-sky-700/50 text-sky-100";
+  if (family === "flux") return "bg-violet-700/55 text-violet-100";
+  if (family === "sdxl") return "bg-emerald-700/55 text-emerald-100";
+  if (family === "gguf") return "bg-amber-700/50 text-amber-100";
+  return "bg-white/10 text-white/65";
 }
 
 function numberParam(value: unknown, fallback: number): number {
@@ -538,16 +678,4 @@ function pickDefaultImageModel(models: Model[]): Model | undefined {
 
 function isNunchaku(model: Model | undefined): boolean {
   return Boolean(model?.quant?.startsWith("nunchaku"));
-}
-
-function modelMeta(model: Model): { label: string; hint?: string } {
-  const tags: string[] = [];
-  if (model.quant) tags.push(model.quant);
-  if (model.estimated_vram_gb) {
-    const prefix = model.slow ? ">=" : "~";
-    const suffix = model.vram_measured ? " measured" : "";
-    tags.push(`${prefix}${model.estimated_vram_gb.toFixed(1)} GB${suffix}`);
-  }
-  if (model.slow) tags.push("slow");
-  return { label: model.name, hint: tags.length ? tags.join(" / ") : undefined };
 }

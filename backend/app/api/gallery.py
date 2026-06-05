@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
+import tempfile
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.background import BackgroundTask
 
-from ..schemas import ImageOut
+from ..schemas import ImageExportIn, ImageOut
 from ..services import gallery_service
 from .deps import get_session
 
@@ -24,13 +28,15 @@ async def list_images(
     offset: int = 0,
     q: str | None = Query(None, max_length=200),
     model: str | None = Query(None, max_length=200),
+    size: str | None = Query(None, pattern="^(square|landscape|portrait|large|small)$"),
+    lora: str | None = Query(None, max_length=200),
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     session: AsyncSession = Depends(get_session),
 ) -> list[ImageOut]:
     images = await gallery_service.list_images(
         session, limit=limit, offset=offset, q=q,
-        model=model, date_from=date_from, date_to=date_to,
+        model=model, size=size, lora=lora, date_from=date_from, date_to=date_to,
     )
     return [ImageOut.model_validate(gallery_service.to_out_dict(i)) for i in images]
 
@@ -39,6 +45,38 @@ async def list_images(
 async def image_stats(session: AsyncSession = Depends(get_session)) -> dict:
     """Generation counters for the History header (total / today / per-model)."""
     return await gallery_service.stats(session)
+
+
+@router.post("/export")
+async def export_images(body: ImageExportIn, session: AsyncSession = Depends(get_session)) -> FileResponse:
+    images = await gallery_service.get_images(session, body.image_ids)
+    if not images:
+        raise HTTPException(404, "no selected images found")
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tmp:
+        zip_path = Path(tmp.name)
+
+    try:
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for img in images:
+                payload = ImageOut.model_validate(gallery_service.to_out_dict(img)).model_dump(mode="json")
+                zf.writestr(
+                    f"metadata/{img.id}.json",
+                    json.dumps(payload, ensure_ascii=False, indent=2),
+                )
+                path = Path(img.path)
+                if path.exists():
+                    zf.write(path, f"images/{img.id}{path.suffix or '.png'}")
+    except Exception:
+        zip_path.unlink(missing_ok=True)
+        raise
+
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename=f"hfabric-images-{len(images)}.zip",
+        background=BackgroundTask(lambda: zip_path.unlink(missing_ok=True)),
+    )
 
 
 @router.delete("/{image_id}")

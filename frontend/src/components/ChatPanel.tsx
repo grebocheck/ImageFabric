@@ -79,6 +79,11 @@ function isPresent<T>(v: T | null | undefined): v is T {
   return v != null;
 }
 
+function hasActiveSelection(): boolean {
+  const selection = window.getSelection?.();
+  return Boolean(selection && !selection.isCollapsed && selection.toString());
+}
+
 function asMessageImport(v: unknown): ChatImportMessage | null {
   if (!isRecord(v)) return null;
   const role = v.role;
@@ -192,6 +197,7 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
+  const stickToBottom = useRef(true);
   // streaming-stat trackers
   const sendStart = useRef(0);
   const firstAt = useRef<number | null>(null);
@@ -250,9 +256,22 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
     localStorage.setItem(PROMPT_HISTORY_KEY, JSON.stringify(promptHistory));
   }, [promptHistory]);
 
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+  }, []);
+
+  const updateScrollStickiness = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 96;
+  }, []);
+
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages]);
+    if (!stickToBottom.current || hasActiveSelection()) return;
+    scrollToBottom("auto");
+  }, [messages, scrollToBottom]);
 
   // auto-grow the composer up to a cap, then scroll inside it
   useEffect(() => {
@@ -301,6 +320,7 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
   useEvents(onChatEvent);
 
   const selectConversation = useCallback(async (id: string) => {
+    stickToBottom.current = true;
     setActiveId(id);
     setEditingId(null);
     setStats(null);
@@ -344,6 +364,7 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
 
   const newChat = useCallback(async () => {
     const c = await api.createConversation({ model_id: modelId || llmModels[0]?.id });
+    stickToBottom.current = true;
     setConvs((p) => [c, ...p]);
     setActiveId(c.id);
     setMessages([]);
@@ -372,6 +393,7 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
   const submit = useCallback(async (content: string, convId: string) => {
     const mdl = modelId || llmModels[0]?.id;
     if (!mdl) return;
+    stickToBottom.current = true;
     setBusy(true);
     setStats(null);
     sendStart.current = Date.now();
@@ -401,6 +423,7 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
 
   const submitImage = useCallback(async (prompt: string, convId: string) => {
     const img = pickImageModel(models);
+    stickToBottom.current = true;
     if (!img) {
       setMessages((p) => [...p, { id: "tmp-u", role: "user", content: `/image ${prompt}` },
         { id: "tmp-a", role: "assistant", content: "⚠ no image model available", error: true }]);
@@ -646,7 +669,7 @@ export function ChatPanel({ models, jump }: { models: Model[]; jump?: ChatJump |
 
       {/* --- conversation --- */}
       <div className="flex min-w-0 flex-1 flex-col rounded-lg border border-white/10">
-        <div ref={scrollRef} className="flex-1 space-y-4 overflow-y-auto p-4">
+        <div ref={scrollRef} onScroll={updateScrollStickiness} className="flex-1 space-y-4 overflow-y-auto p-4">
           {messages.length === 0 ? (
             <div className="flex h-full items-center justify-center text-center text-sm text-white/30">
               Start a conversation with the local model.

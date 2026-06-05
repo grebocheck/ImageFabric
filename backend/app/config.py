@@ -26,7 +26,7 @@ _EXE = ".exe" if sys.platform == "win32" else ""
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="HFAB_",
-        env_file=".env",
+        env_file=ROOT / ".env",
         extra="ignore",
     )
 

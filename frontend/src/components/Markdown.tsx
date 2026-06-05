@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { isValidElement, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
@@ -49,19 +49,48 @@ export function Markdown({ content }: { content: string }) {
 }
 
 function InlineOrBlockCode({ className, children }: { className?: string; children?: ReactNode }) {
+  const text = textFromChildren(children);
   // Block code carries a language-* class (added by rehype-highlight) and is
   // wrapped by <pre>; leave it for the hljs theme. Inline code we style here.
-  if (className?.includes("language-")) {
+  if (className?.includes("language-") || text.includes("\n")) {
     return <code className={className}>{children}</code>;
   }
-  return <code className="rounded bg-white/10 px-1 py-0.5 text-[0.85em]">{children}</code>;
+  return <CopyableInlineCode>{children}</CopyableInlineCode>;
+}
+
+function CopyableInlineCode({ children }: { children?: ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  const text = textFromChildren(children);
+
+  const copy = () => {
+    if (!text.trim() || hasActiveSelection()) return;
+    navigator.clipboard?.writeText(text)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+      })
+      .catch(() => {});
+  };
+
+  return (
+    <code
+      onClick={copy}
+      title={copied ? "copied" : "click to copy"}
+      className={`cursor-copy rounded px-1 py-0.5 text-[0.85em] transition ${
+        copied ? "bg-emerald-500/20 text-emerald-100" : "bg-white/10 hover:bg-white/15"
+      }`}
+    >
+      {children}
+    </code>
+  );
 }
 
 function PreBlock({ children }: { children?: ReactNode }) {
   const ref = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
 
-  const copy = () => {
+  const copy = (force = false) => {
+    if (!force && hasActiveSelection()) return;
     const text = ref.current?.innerText ?? "";
     navigator.clipboard?.writeText(text)
       .then(() => {
@@ -74,14 +103,33 @@ function PreBlock({ children }: { children?: ReactNode }) {
   return (
     <div className="group relative my-2">
       <button
-        onClick={copy}
-        className="absolute right-2 top-2 rounded border border-white/15 bg-black/50 px-1.5 py-0.5 text-[10px] text-white/60 opacity-0 transition hover:bg-white/10 group-hover:opacity-100"
+        onClick={() => copy(true)}
+        className={`absolute right-2 top-2 rounded border border-white/15 bg-black/50 px-1.5 py-0.5 text-[10px] text-white/60 transition hover:bg-white/10 ${
+          copied ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+        }`}
       >
         {copied ? "copied" : "copy"}
       </button>
-      <pre ref={ref} className="overflow-x-auto rounded-md border border-white/10 bg-black/50 p-3 text-xs leading-relaxed">
+      <pre
+        ref={ref}
+        onClick={() => copy(false)}
+        title="click to copy"
+        className="cursor-copy overflow-x-auto rounded-md border border-white/10 bg-black/50 p-3 text-xs leading-relaxed"
+      >
         {children}
       </pre>
     </div>
   );
+}
+
+function hasActiveSelection(): boolean {
+  const selection = window.getSelection?.();
+  return Boolean(selection && !selection.isCollapsed && selection.toString());
+}
+
+function textFromChildren(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textFromChildren).join("");
+  if (isValidElement<{ children?: ReactNode }>(node)) return textFromChildren(node.props.children);
+  return "";
 }

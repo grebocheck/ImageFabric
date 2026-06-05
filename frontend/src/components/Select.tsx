@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 
 export type SelectOption = { value: string; label: string; hint?: string; disabled?: boolean };
 
@@ -17,21 +17,37 @@ export function Select({
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
+  const [query, setQuery] = useState("");
   const ref = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
   const selected = options.find((o) => o.value === value);
+  const searchable = options.length > 6;
+  const filteredOptions = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((o) => `${o.label} ${o.hint ?? ""}`.toLowerCase().includes(q));
+  }, [options, query]);
 
   useEffect(() => {
     if (!open) return;
-    setActive(options.findIndex((o) => o.value === value));
+    setActive(filteredOptions.findIndex((o) => o.value === value));
     const onDoc = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
-  }, [open, options, value]);
+  }, [filteredOptions, open, value]);
+
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+      return;
+    }
+    if (searchable) requestAnimationFrame(() => searchRef.current?.focus());
+  }, [open, searchable]);
 
   const choose = (i: number) => {
-    const opt = options[i];
+    const opt = filteredOptions[i];
     if (!opt || opt.disabled) return;
     onChange(opt.value);
     setOpen(false);
@@ -40,9 +56,9 @@ export function Select({
   const step = (dir: 1 | -1) => {
     setActive((cur) => {
       let i = cur;
-      for (let n = 0; n < options.length; n++) {
-        i = (i + dir + options.length) % options.length;
-        if (!options[i]?.disabled) return i;
+      for (let n = 0; n < filteredOptions.length; n++) {
+        i = (i + dir + filteredOptions.length) % filteredOptions.length;
+        if (!filteredOptions[i]?.disabled) return i;
       }
       return cur;
     });
@@ -61,6 +77,22 @@ export function Select({
       if (open) choose(active);
       else setOpen(true);
     } else if (e.key === "Escape") {
+      setOpen(false);
+    }
+  };
+
+  const onSearchKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      step(1);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      step(-1);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      choose(active);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
       setOpen(false);
     }
   };
@@ -89,27 +121,44 @@ export function Select({
       </button>
 
       {open && (
-        <div className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-white/10 bg-surface-2 py-1 shadow-xl shadow-black/60">
-          {options.length === 0 ? <div className="px-2.5 py-1.5 text-sm text-white/30">no options</div> : null}
-          {options.map((o, i) => (
-            <button
-              key={o.value || `opt-${i}`}
-              type="button"
-              disabled={o.disabled}
-              onClick={() => choose(i)}
-              onMouseEnter={() => setActive(i)}
-              className={`flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-sm disabled:cursor-not-allowed disabled:opacity-30 ${
-                o.value === value
-                  ? "bg-violet-600/30 text-white"
-                  : i === active
-                    ? "bg-white/10 text-white/90"
-                    : "text-white/80"
-              }`}
-            >
-              <span className="min-w-0 truncate">{o.label}</span>
-              {o.hint ? <span className="shrink-0 text-[11px] text-white/40">{o.hint}</span> : null}
-            </button>
-          ))}
+        <div className="absolute z-30 mt-1 w-full overflow-hidden rounded-md border border-white/10 bg-surface-2 shadow-xl shadow-black/60">
+          {searchable ? (
+            <div className="border-b border-white/10 p-1.5">
+              <input
+                ref={searchRef}
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setActive(0);
+                }}
+                onKeyDown={onSearchKeyDown}
+                placeholder="search..."
+                className="w-full rounded border border-white/10 bg-black/30 px-2 py-1 text-xs outline-none transition placeholder:text-white/25 focus:border-violet-500"
+              />
+            </div>
+          ) : null}
+          <div className="max-h-56 overflow-y-auto py-1">
+            {filteredOptions.length === 0 ? <div className="px-2.5 py-1.5 text-sm text-white/30">no options</div> : null}
+            {filteredOptions.map((o, i) => (
+              <button
+                key={o.value || `opt-${i}`}
+                type="button"
+                disabled={o.disabled}
+                onClick={() => choose(i)}
+                onMouseEnter={() => setActive(i)}
+                className={`flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-sm disabled:cursor-not-allowed disabled:opacity-30 ${
+                  o.value === value
+                    ? "bg-violet-600/30 text-white"
+                    : i === active
+                      ? "bg-white/10 text-white/90"
+                      : "text-white/80"
+                }`}
+              >
+                <span className="min-w-0 truncate">{o.label}</span>
+                {o.hint ? <span className="shrink-0 text-[11px] text-white/40">{o.hint}</span> : null}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

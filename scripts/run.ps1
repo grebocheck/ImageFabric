@@ -13,8 +13,9 @@
 #>
 param(
     [switch]$Stub,
-    [int]$Port = 8260,
-    [int]$FrontendPort = 5173
+    [int]$Port = 0,
+    [int]$FrontendPort = 0,
+    [string]$BindHost = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -23,7 +24,60 @@ Set-Location $root
 
 $venvPy = Join-Path $root ".venv\Scripts\python.exe"
 
+function Import-DotEnv([string]$Path) {
+    if (-not (Test-Path $Path)) { return }
+    foreach ($line in Get-Content $Path) {
+        $trimmed = $line.Trim()
+        if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith("#")) { continue }
+
+        $eq = $trimmed.IndexOf("=")
+        if ($eq -lt 1) { continue }
+
+        $key = $trimmed.Substring(0, $eq).Trim()
+        $value = $trimmed.Substring($eq + 1).Trim()
+        if (
+            ($value.StartsWith('"') -and $value.EndsWith('"')) -or
+            ($value.StartsWith("'") -and $value.EndsWith("'"))
+        ) {
+            $value = $value.Substring(1, $value.Length - 2)
+        }
+
+        if ([Environment]::GetEnvironmentVariable($key, "Process") -eq $null) {
+            Set-Item -Path "Env:$key" -Value $value
+        }
+    }
+}
+
+function Get-EnvInt([string]$Name, [int]$Default) {
+    $value = [Environment]::GetEnvironmentVariable($Name, "Process")
+    if ([string]::IsNullOrWhiteSpace($value)) { return $Default }
+    return [int]$value
+}
+
+function Test-Truthy([string]$Value) {
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+    return @("1", "true", "yes", "on").Contains($Value.ToLowerInvariant())
+}
+
+Import-DotEnv (Join-Path $root ".env")
+
+if ($Port -le 0) { $Port = Get-EnvInt "HFAB_PORT" 8260 }
+if ($FrontendPort -le 0) { $FrontendPort = Get-EnvInt "HFAB_FRONTEND_PORT" 5173 }
+if ([string]::IsNullOrWhiteSpace($BindHost)) {
+    if ([string]::IsNullOrWhiteSpace($env:HFAB_HOST)) {
+        $BindHost = "127.0.0.1"
+    } else {
+        $BindHost = $env:HFAB_HOST
+    }
+}
+
+$env:HFAB_HOST = $BindHost
+$env:HFAB_PORT = "$Port"
+
 if ($Stub) {
+    $env:HFAB_STUB_MODE = "true"
+    Write-Host "[mode] STUB - architectural pipeline only, no GPU/ML stack" -ForegroundColor DarkYellow
+} elseif (Test-Truthy $env:HFAB_STUB_MODE) {
     $env:HFAB_STUB_MODE = "true"
     Write-Host "[mode] STUB - architectural pipeline only, no GPU/ML stack" -ForegroundColor DarkYellow
 } else {
@@ -46,8 +100,8 @@ function Stop-Port([int]$p) {
     }
 }
 Stop-Port $Port
-Stop-Port 8261          # llama-server (LLM)
-Stop-Port 8262          # llama-server (RAG embeddings)
+Stop-Port (Get-EnvInt "HFAB_LLAMA_PORT" 8261)          # llama-server (LLM)
+Stop-Port (Get-EnvInt "HFAB_LLAMA_EMBED_PORT" 8262)    # llama-server (RAG embeddings)
 Stop-Port $FrontendPort
 
 # Safety net: a run closed via the window 'X' (not Ctrl+C) skips the finally
@@ -81,13 +135,13 @@ if (-not (Test-Path (Join-Path $root "frontend\node_modules"))) {
     Push-Location frontend; npm install; Pop-Location
 }
 
-Write-Host "[run] backend  -> http://127.0.0.1:$Port"        -ForegroundColor Green
+Write-Host "[run] backend  -> http://${BindHost}:$Port"       -ForegroundColor Green
 Write-Host "[run] frontend -> http://localhost:$FrontendPort" -ForegroundColor Green
 Write-Host "[run] both run in THIS window; press Ctrl+C to stop.`n" -ForegroundColor Yellow
 
 # Backend shares this console (one window). No --reload -> a single PID to manage.
 $backend = Start-Process -FilePath $venvPy `
-    -ArgumentList @("-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "$Port") `
+    -ArgumentList @("-m", "uvicorn", "app.main:app", "--host", "$BindHost", "--port", "$Port") `
     -WorkingDirectory (Join-Path $root "backend") `
     -NoNewWindow -PassThru
 

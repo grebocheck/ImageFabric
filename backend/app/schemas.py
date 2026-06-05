@@ -88,6 +88,10 @@ class ImageOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ImageExportIn(BaseModel):
+    image_ids: list[str] = Field(min_length=1, max_length=500)
+
+
 # ----------------------------------------------------------------------- chat
 class MessageOut(BaseModel):
     id: str

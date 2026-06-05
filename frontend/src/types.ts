@@ -134,6 +134,7 @@ export interface ImageStats {
   total: number;
   today: number;
   by_model: { model: string; count: number }[];
+  by_lora?: { id: string; name: string; count: number }[];
 }
 
 // A request to load params into the image composer (from History / a result).
