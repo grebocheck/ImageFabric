@@ -94,6 +94,8 @@ Env vars (prefix `HFAB_`, or a `.env` file in repo root). Highlights:
 | `HFAB_ATTENTION_BACKEND` | `auto` | PyTorch SDPA selector: `auto`, `flash`, `efficient`, `math`, or `cudnn`. |
 | `HFAB_TORCH_COMPILE` | `false` | Compile FLUX transformer and run a warmup pass. |
 | `HFAB_SDXL_TURBO_LORA` | unset | Optional SDXL DMD2/Lightning-style LoRA source. |
+| `HFAB_IMAGE_CLEANUP_AFTER_EACH_JOB` | `true` | Release per-image temporary allocations while keeping the resident model loaded. |
+| `HFAB_IMAGE_LORA_CACHE_MAX` | `2` | Max runtime LoRA adapters to keep in a resident image pipeline. |
 | `HFAB_KEEP_WARM_MODELS` | `false` | Park one image pipeline in CPU RAM between swaps. |
 
 ### llama.cpp memory knobs
@@ -137,6 +139,15 @@ generation without compile.
 Set `HFAB_SDXL_TURBO_LORA` to a local `.safetensors`, folder, or Hugging Face
 repo id to load an SDXL turbo LoRA. When active, untouched default steps/guidance
 are replaced by `HFAB_SDXL_TURBO_STEPS` and `HFAB_SDXL_TURBO_GUIDANCE`.
+
+Long image sessions run a lightweight post-job stabilization pass by default:
+`gc.collect()`, `torch.cuda.empty_cache()`, `torch.cuda.ipc_collect()`, bounded
+runtime LoRA adapter cleanup, and an adaptive soft-recycle if CUDA allocated
+memory drifts above the loaded baseline. Tune with
+`HFAB_IMAGE_CLEANUP_AFTER_EACH_JOB`, `HFAB_IMAGE_LORA_CACHE_MAX`,
+`HFAB_IMAGE_RECYCLE_CUDA_GROWTH_GB`, and `HFAB_IMAGE_RECYCLE_MIN_JOBS`.
+Use `python scripts\sdxl_resident_drift_test.py --jobs 8` against a running
+REAL backend to validate repeated same-model SDXL generations without unloading.
 
 ### LoRA management
 

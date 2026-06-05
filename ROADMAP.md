@@ -65,6 +65,10 @@ P0 implementation notes:
 - Nunchaku FLUX uses `NunchakuT5EncoderModel` and the non-gated FLUX config repo;
   it no longer reads the local 16 GB fp8 checkpoint to borrow encoders.
 - The swap-loop leak runner is `scripts/swap_leak_test.py`.
+- Long resident image sessions now have a post-job stabilization hook: image
+  backends can release temporary allocations without unloading the resident
+  model. `scripts/sdxl_resident_drift_test.py` covers the specific "same SDXL
+  model, many jobs in a row" drift case that swap-loop tests do not exercise.
 
 ### P1 — Speed & live UX
 
@@ -110,6 +114,8 @@ P2 implementation notes:
 - LoRA management scans `models/lora` (or `HFAB_LORA_MODELS_DIR`), exposes
   `/api/loras`, validates queued LoRA ids/weights against the selected image
   model, and lazy-loads selected adapters into SDXL/FLUX diffusers pipelines.
+  Runtime adapters are bounded by `HFAB_IMAGE_LORA_CACHE_MAX` so trying many
+  LoRAs in a long session cannot grow the resident pipeline forever.
 - History/search/export/settings are wired through `/api/images?q=...`,
   `/api/images/{id}/metadata`, PNG downloads, and a read-only settings drawer
   backed by `/api/settings`.
@@ -131,8 +137,8 @@ passes static integrity checks:
   queue drag-reorder, and gallery search/metadata are all wired into `App.tsx`.
 - Environment is real-mode ready: `.venv` with the GPU stack, `frontend/node_modules`,
   `bin/llama/llama-server.exe` (CUDA), and the fp4/fp8/SDXL/GGUF model files all present.
-- New helper scripts shipped: `scripts/swap_leak_test.py`, `phase_batch_check.py`,
-  `quality_ab.py`.
+- New helper scripts shipped: `scripts/swap_leak_test.py`,
+  `scripts/sdxl_resident_drift_test.py`, `phase_batch_check.py`, `quality_ab.py`.
 - Convenient launcher added: **`run.bat`** (REAL mode by default, `run.bat stub`
   for no-GPU mode).
 
@@ -203,6 +209,15 @@ M1 live validation notes (2026-06-04, RTX 5070 Ti / REAL mode):
   FLUX.2 nunchaku-int4 on sm_120 so the UI does not expose a known-broken
   choice. Image-GGUF remains unsupported by this backend, so bnb-nf4 is the
   practical fallback for M1 quality comparison.
+- 2026-06-05 long-session image stabilization: the Worker now calls
+  `GpuBackend.after_job(...)` after every job. The diffusers image backend uses
+  it to run `gc.collect()`, `torch.cuda.empty_cache()`, `torch.cuda.ipc_collect()`,
+  bound runtime LoRA adapters, and soft-recycle the resident pipeline if CUDA
+  allocated memory drifts above the loaded baseline after several generations.
+  Tunables: `HFAB_IMAGE_CLEANUP_AFTER_EACH_JOB`,
+  `HFAB_IMAGE_LORA_CACHE_MAX`, `HFAB_IMAGE_RECYCLE_CUDA_GROWTH_GB`, and
+  `HFAB_IMAGE_RECYCLE_MIN_JOBS`. Live validation runner:
+  `python scripts\sdxl_resident_drift_test.py --jobs 8`.
 
 ### P3 — FLUX.2 [klein] (new model family)
 

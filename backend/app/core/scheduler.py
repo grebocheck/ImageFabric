@@ -150,6 +150,8 @@ class Worker:
     async def _run(self, snap: JobSnapshot) -> None:
         self._current_job_id = snap.id
         self._cancel_current = False
+        backend = None
+        failed = False
         await self._bus.publish(Event(EventType.JOB_STARTED, job_id=snap.id, job_type=snap.type.value))
         try:
             backend = self._registry.get_backend(snap.model_id)
@@ -170,6 +172,7 @@ class Worker:
                 assert isinstance(backend, ImageBackend)
                 records = await backend.generate(self._with_lora_paths(snap.params), progress)
                 if self._cancel_current:
+                    failed = True
                     await self._mark_cancelled(snap)
                 else:
                     await self._finish_image(snap, records)
@@ -181,15 +184,25 @@ class Worker:
 
                 text = await backend.complete(snap.params, on_token)
                 if self._cancel_current:
+                    failed = True
                     await self._mark_cancelled(snap, text)
                 else:
                     await self._finish_llm(snap, text)
 
         except GenerationCancelled:
+            failed = True
             await self._mark_cancelled(snap)
         except Exception as exc:  # noqa: BLE001
+            failed = True
             await self._fail(snap, repr(exc))
         finally:
+            if backend is not None:
+                try:
+                    cleanup = await backend.after_job(snap.id, snap.params, failed=failed)
+                    if cleanup:
+                        await self._bus.publish(Event("job.cleanup", job_id=snap.id, **cleanup))
+                except Exception as exc:  # noqa: BLE001
+                    await self._bus.publish(Event("job.cleanup", job_id=snap.id, error=repr(exc)))
             self._current_job_id = None
             self._cancel_current = False
 

@@ -155,6 +155,12 @@ class Settings(BaseSettings):
     sdxl_turbo_lora_weight: float = 1.0
     sdxl_turbo_steps: int = 4
     sdxl_turbo_guidance: float = 1.0
+    # Runtime stabilization for long image sessions. This keeps the resident
+    # model loaded, but releases per-job temporaries and bounds adapter growth.
+    image_cleanup_after_each_job: bool = True
+    image_lora_cache_max: int = 2
+    image_recycle_cuda_growth_gb: float = 2.0
+    image_recycle_min_jobs: int = 6
 
     # --- optional keep-warm policy (P2.1) ---
     # OFF by default. When enabled, the arbiter may park one image pipeline in

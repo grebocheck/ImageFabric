@@ -87,6 +87,16 @@ class GpuBackend(abc.ABC):
         No-op by default; backends that can interrupt (LLM streaming, image
         denoise step loop) override this."""
 
+    async def after_job(self, job_id: str, params: dict[str, Any], *, failed: bool = False) -> dict[str, Any] | None:
+        """Optional post-job stabilization hook.
+
+        The arbiter keeps a model resident across same-model jobs for speed, so
+        concrete backends can use this to release temporary allocations without
+        unloading the resident model. Returning a dict publishes lightweight
+        diagnostics on the event bus.
+        """
+        return None
+
     @abc.abstractmethod
     async def load(self) -> None: ...
 

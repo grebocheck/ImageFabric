@@ -34,6 +34,9 @@ class DiffusersImageBackend(ImageBackend):
         self._pipe: Any = None  # diffusers pipeline in real mode
         self._active_features: dict[str, Any] = {}
         self._loaded_loras: dict[str, str] = {}
+        self._loaded_lora_last_used: dict[str, int] = {}
+        self._generation_index = 0
+        self._cuda_allocated_baseline_gb: float | None = None
         self._stop = False
 
     def request_stop(self) -> None:
@@ -78,6 +81,7 @@ class DiffusersImageBackend(ImageBackend):
         os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
         self._active_features = {}
         self._loaded_loras = {}
+        self._loaded_lora_last_used = {}
         report: dict[str, Any] = {
             "acceleration": {},
             "memory": {"start": self._memory_snapshot(torch)},
@@ -127,6 +131,7 @@ class DiffusersImageBackend(ImageBackend):
         self._pipe = pipe
         self._apply_acceleration(torch, pipe, report)
         report["memory"]["end"] = self._memory_snapshot(torch)
+        self._remember_cuda_baseline(torch)
         self._load_report = report
 
     def _load_nunchaku_flux(self, torch) -> Any:
@@ -548,13 +553,11 @@ class DiffusersImageBackend(ImageBackend):
     async def unload(self) -> None:
         if not self._loaded and not self._warm:
             return
-        if not settings.stub_mode and self._pipe is not None:
-            await asyncio.to_thread(self._free_pipeline_sync)
-        self._pipe = None
-        self._loaded = False
-        self._warm = False
-        self._active_features = {}
-        self._loaded_loras = {}
+        try:
+            if not settings.stub_mode and self._pipe is not None:
+                await asyncio.to_thread(self._free_pipeline_sync)
+        finally:
+            self._clear_resident_state(reset_generation=True)
 
     async def park(self) -> bool:
         if not self._loaded:
@@ -597,6 +600,7 @@ class DiffusersImageBackend(ImageBackend):
         elif hasattr(self._pipe, "enable_model_cpu_offload"):
             self._pipe.enable_model_cpu_offload()
         report["memory"]["end"] = self._memory_snapshot(torch)
+        self._remember_cuda_baseline(torch)
         self._load_report = report
 
     def _free_pipeline_sync(self) -> None:
@@ -610,6 +614,105 @@ class DiffusersImageBackend(ImageBackend):
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
             torch.cuda.ipc_collect()
+
+    def _clear_resident_state(self, *, reset_generation: bool) -> None:
+        self._pipe = None
+        self._loaded = False
+        self._warm = False
+        self._active_features = {}
+        self._loaded_loras = {}
+        self._loaded_lora_last_used = {}
+        self._cuda_allocated_baseline_gb = None
+        if reset_generation:
+            self._generation_index = 0
+
+    def _recycle_pipeline_sync(self) -> None:
+        try:
+            self._free_pipeline_sync()
+        finally:
+            self._clear_resident_state(reset_generation=False)
+        self._load_pipeline_sync()
+        self._loaded = True
+
+    # ------------------------------------------------------- post-job hygiene
+    async def after_job(self, job_id: str, params: dict[str, Any], *, failed: bool = False) -> dict[str, Any] | None:
+        if settings.stub_mode or not settings.image_cleanup_after_each_job or self._pipe is None:
+            return None
+        return await asyncio.to_thread(self._stabilize_after_job_sync, params, failed)
+
+    def _stabilize_after_job_sync(self, params: dict[str, Any], failed: bool) -> dict[str, Any]:
+        import gc  # noqa: PLC0415
+
+        import torch  # noqa: PLC0415
+
+        before = self._memory_snapshot(torch)
+        prune_error: str | None = None
+        try:
+            pruned_loras = self._prune_lora_cache(self._requested_lora_ids(params))
+        except Exception as exc:  # noqa: BLE001
+            pruned_loras = []
+            prune_error = repr(exc)
+
+        # Offload-style pipelines can leave their last active module on device
+        # until the next call. Freeing hooks keeps the one-resident invariant honest
+        # without unloading the pipeline object itself.
+        if self.descriptor.family is not ModelFamily.SDXL and hasattr(self._pipe, "maybe_free_model_hooks"):
+            self._pipe.maybe_free_model_hooks()
+
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+            if hasattr(torch.cuda, "reset_peak_memory_stats"):
+                torch.cuda.reset_peak_memory_stats()
+
+        after_cleanup = self._memory_snapshot(torch)
+        recycled = False
+        recycle_reason = self._recycle_reason(after_cleanup)
+        if recycle_reason:
+            self._recycle_pipeline_sync()
+            recycled = True
+
+        after = self._memory_snapshot(torch)
+        return {
+            "backend": self.resident_key,
+            "family": self.descriptor.family.value,
+            "failed": failed,
+            "cleanup": {
+                "before": before.get("cuda_process"),
+                "after": after.get("cuda_process"),
+                "pruned_loras": pruned_loras,
+                "lora_prune_error": prune_error,
+                "cached_loras": len(self._loaded_loras),
+                "recycled": recycled,
+                "recycle_reason": recycle_reason,
+                "generation_index": self._generation_index,
+            },
+        }
+
+    def _recycle_reason(self, snapshot: dict[str, Any]) -> str | None:
+        threshold = float(settings.image_recycle_cuda_growth_gb)
+        if threshold <= 0 or self._cuda_allocated_baseline_gb is None:
+            return None
+        if self._generation_index < max(1, int(settings.image_recycle_min_jobs)):
+            return None
+        cuda = snapshot.get("cuda_process") or {}
+        allocated = cuda.get("allocated_gb")
+        if allocated is None:
+            return None
+        growth = float(allocated) - self._cuda_allocated_baseline_gb
+        if growth > threshold:
+            return (
+                f"cuda allocated grew {growth:.2f} GB over loaded baseline "
+                f"{self._cuda_allocated_baseline_gb:.2f} GB"
+            )
+        return None
+
+    def _remember_cuda_baseline(self, torch) -> None:
+        if not torch.cuda.is_available():
+            self._cuda_allocated_baseline_gb = None
+            return
+        self._cuda_allocated_baseline_gb = round(torch.cuda.memory_allocated() / 1e9, 2)
 
     # ------------------------------------------------------------- generate
     async def generate(
@@ -627,6 +730,7 @@ class DiffusersImageBackend(ImageBackend):
         results: list[dict[str, Any]] = []
         for i in range(batch):
             seed = int(base_seed) + i
+            self._generation_index += 1
             if settings.stub_mode:
                 rec = await self._generate_stub(params, width, height, steps, seed, i, batch, progress)
             else:
@@ -772,6 +876,7 @@ class DiffusersImageBackend(ImageBackend):
             adapter = self._load_lora_adapter(request["id"], Path(request["path"]))
             adapters.append(adapter)
             weights.append(float(request["weight"]))
+            self._loaded_lora_last_used[request["id"]] = self._generation_index
 
         if adapters:
             if not hasattr(self._pipe, "set_adapters"):
@@ -805,6 +910,18 @@ class DiffusersImageBackend(ImageBackend):
             })
         return requests
 
+    def _requested_lora_ids(self, params: dict[str, Any]) -> set[str]:
+        raw_loras = params.get("loras") or []
+        if not isinstance(raw_loras, list):
+            return set()
+        ids: set[str] = set()
+        for item in raw_loras:
+            if isinstance(item, str):
+                ids.add(item)
+            elif isinstance(item, dict) and isinstance(item.get("id"), str):
+                ids.add(item["id"])
+        return ids
+
     def _load_lora_adapter(self, lora_id: str, path: Path) -> str:
         if lora_id in self._loaded_loras:
             return self._loaded_loras[lora_id]
@@ -819,7 +936,45 @@ class DiffusersImageBackend(ImageBackend):
         else:
             self._pipe.load_lora_weights(str(path), adapter_name=adapter)
         self._loaded_loras[lora_id] = adapter
+        self._loaded_lora_last_used[lora_id] = self._generation_index
         return adapter
+
+    def _prune_lora_cache(self, keep_ids: set[str]) -> list[str]:
+        if not self._loaded_loras:
+            return []
+
+        max_cached = int(settings.image_lora_cache_max)
+        if max_cached < 0:
+            return []
+
+        if max_cached == 0:
+            prune_ids = list(self._loaded_loras)
+        else:
+            ordered = sorted(
+                self._loaded_loras,
+                key=lambda lora_id: self._loaded_lora_last_used.get(lora_id, -1),
+            )
+            prune_ids = []
+            for lora_id in ordered:
+                if len(self._loaded_loras) - len(prune_ids) <= max_cached:
+                    break
+                if lora_id not in keep_ids:
+                    prune_ids.append(lora_id)
+        if not prune_ids:
+            return []
+
+        adapter_names = [self._loaded_loras[lora_id] for lora_id in prune_ids]
+        if hasattr(self._pipe, "delete_adapters"):
+            self._pipe.delete_adapters(adapter_names)
+        elif len(prune_ids) == len(self._loaded_loras) and not self._active_features.get("sdxl_turbo_lora") and hasattr(self._pipe, "unload_lora_weights"):
+            self._pipe.unload_lora_weights()
+        else:
+            return []
+
+        for lora_id in prune_ids:
+            self._loaded_loras.pop(lora_id, None)
+            self._loaded_lora_last_used.pop(lora_id, None)
+        return prune_ids
 
     @staticmethod
     def _lora_adapter_name(lora_id: str) -> str:
