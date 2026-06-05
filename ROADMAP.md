@@ -412,11 +412,11 @@ P3/UX notes:
 - [x] **P5.D2 — Prompt & size ergonomics.** Aspect-ratio quick buttons
   (respecting the 768² FLUX.2 pin from P3) and a styled sampler/steps/guidance
   control group shipped 2026-06-04. *Remaining:* prompt-history recall.
-- [~] **P5.D3 — Reusable control kit.** In progress: `Select`, `Toast`,
-  `Toggle`, and `Badge` are factored out and adopted (no hand-rolled `<select>`s
-  remain; chat tool checkboxes → `Toggle`; queue type chip → `Badge`).
-  *Remaining:* a shared `Slider` and migrating the remaining number inputs onto
-  it (LoRA weight, sampling).
+- [x] **P5.D3 — Reusable control kit.** Shipped: `Select`, `Toast`, `Toggle`,
+  `Badge`, and `Slider` are factored into shared components and adopted (all
+  native `<select>`s gone; chat tool checkboxes → `Toggle`; queue type chip →
+  `Badge`; LoRA weight → `Slider`). Other tabs can now pull from the same kit;
+  migrating the remaining ad-hoc number inputs onto `Slider` is incremental.
 
 P5 design constraints:
 - Pure presentation: must not add a resident model, change swap behavior, or

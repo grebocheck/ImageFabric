@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { Select, type SelectOption } from "./Select";
+import { Slider } from "./Slider";
 import type { Lora, Model, Preset } from "../types";
 
 const STORE_KEY = "hfabric.image.composer";
@@ -356,25 +357,24 @@ export function ImageComposer({
               {selectedLoras.map((selected) => {
                 const lora = loras.find((item) => item.id === selected.id);
                 return (
-                  <div key={selected.id} className="grid grid-cols-[minmax(0,1fr)_72px_24px] items-center gap-2 rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
-                    <div className="min-w-0 truncate text-xs text-white/75" title={lora?.name ?? selected.id}>{lora?.name ?? selected.id}</div>
-                    <input
-                      type="number"
+                  <div key={selected.id} className="rounded-md border border-white/10 bg-black/20 px-2 py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0 truncate text-xs text-white/75" title={lora?.name ?? selected.id}>{lora?.name ?? selected.id}</div>
+                      <button
+                        onClick={() => removeLora(selected.id)}
+                        className="h-5 w-5 shrink-0 rounded border border-white/15 text-xs text-white/50 hover:bg-white/10 hover:text-white"
+                        title="Remove LoRA"
+                      >
+                        x
+                      </button>
+                    </div>
+                    <Slider
                       value={selected.weight}
                       min={-2}
                       max={2}
                       step={0.05}
-                      onChange={(e) => updateLoraWeight(selected.id, Number(e.target.value))}
-                      className="w-full rounded-md border border-white/10 bg-black/30 px-2 py-1 text-xs outline-none focus:border-violet-500"
-                      aria-label={`${lora?.name ?? selected.id} weight`}
+                      onChange={(v) => updateLoraWeight(selected.id, v)}
                     />
-                    <button
-                      onClick={() => removeLora(selected.id)}
-                      className="h-6 rounded border border-white/15 text-xs text-white/50 hover:bg-white/10 hover:text-white"
-                      title="Remove LoRA"
-                    >
-                      x
-                    </button>
                   </div>
                 );
               })}
