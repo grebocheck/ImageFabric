@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import asyncio
 import math
-import re
 from pathlib import Path
+import re
 from typing import Any
 
 import httpx
@@ -131,7 +131,7 @@ class LocalEmbeddingService:
             self._proc.terminate()
             try:
                 await asyncio.wait_for(self._proc.wait(), timeout=8.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._proc.kill()
                 await self._proc.wait()
         self._proc = None

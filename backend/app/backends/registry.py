@@ -7,8 +7,8 @@ what decides which one is actually resident in VRAM.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
+import re
 
 from ..config import settings
 from ..core.enums import ModelFamily

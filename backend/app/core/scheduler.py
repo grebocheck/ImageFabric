@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import json
 import re
 from typing import Any
@@ -26,6 +26,8 @@ from ..services.rag_service import search_documents as run_rag_search
 from .arbiter import GpuArbiter
 from .enums import EventType, JobStatus, JobType
 from .events import Event, EventBus
+
+_THINK_RE = re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.IGNORECASE | re.DOTALL)
 
 
 def _coerce_int(value: Any, default: int, *, min_value: int, max_value: int) -> int:
@@ -150,7 +152,7 @@ class Worker:
                 self._wakeup.clear()
                 try:
                     await asyncio.wait_for(self._wakeup.wait(), timeout=2.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
                 continue
             await self._run(snap)
@@ -205,7 +207,7 @@ class Worker:
             )
 
             chosen.status = JobStatus.RUNNING
-            chosen.started_at = datetime.now(timezone.utc)
+            chosen.started_at = datetime.now(UTC)
             # enum columns come back as plain strings from SQLite -> normalize so
             # identity checks (`snap.type is JobType.IMAGE`) work downstream.
             return JobSnapshot(chosen.id, JobType(chosen.type), chosen.model_id, dict(chosen.params))
@@ -307,7 +309,7 @@ class Worker:
                 job.status = JobStatus.DONE
                 job.progress = 1.0
                 job.result = {"image_ids": image_ids}
-                job.finished_at = datetime.now(timezone.utc)
+                job.finished_at = datetime.now(UTC)
             # /image chat bridge: render the result inline in the conversation
             if snap.params.get("assistant_message_id"):
                 prompt = str(snap.params.get("prompt", "")).strip()
@@ -328,9 +330,15 @@ class Worker:
         await self._bus.publish(done)
 
     async def _finish_llm(self, snap: JobSnapshot, text: str) -> None:
-        tool_call = self._parse_image_tool_call(text, snap)
+        # Harmony models (gpt-oss) emit chain-of-thought wrapped in <think> by the
+        # llama backend. Keep it only for chat replies (the Thinking panel renders
+        # it); strip it everywhere it would pollute a prompt or tool-call JSON.
+        clean = self._strip_reasoning(text)
+        is_chat = bool(snap.params.get("assistant_message_id"))
+        reply_text = text if is_chat else clean
+        tool_call = self._parse_image_tool_call(clean, snap)
         if tool_call is None:
-            tool_call = await self._build_document_tool_call(text, snap)
+            tool_call = await self._build_document_tool_call(clean, snap)
         child_job_id: str | None = None
         child_job_type: JobType | None = None
         child_text: str | None = None
@@ -339,7 +347,7 @@ class Worker:
             if job:
                 job.status = JobStatus.DONE
                 job.progress = 1.0
-                job.finished_at = datetime.now(timezone.utc)
+                job.finished_at = datetime.now(UTC)
             if tool_call:
                 child_job = Job(
                     type=tool_call["job_type"],
@@ -358,8 +366,8 @@ class Worker:
                 await self._write_chat_reply(s, snap, child_text)
             else:
                 if job:
-                    job.result = {"text": text}
-                await self._write_chat_reply(s, snap, text)
+                    job.result = {"text": reply_text}
+                await self._write_chat_reply(s, snap, reply_text)
         if child_job_id:
             await self._bus.publish(Event(
                 EventType.JOB_CREATED,
@@ -376,7 +384,7 @@ class Worker:
             self.notify()
             return
         await self._bus.publish(Event(
-            EventType.JOB_DONE, job_id=snap.id, job_type=snap.type.value, text=text
+            EventType.JOB_DONE, job_id=snap.id, job_type=snap.type.value, text=reply_text
         ))
 
     def _parse_image_tool_call(self, text: str, snap: JobSnapshot) -> dict[str, Any] | None:
@@ -497,6 +505,15 @@ class Worker:
         return params
 
     @staticmethod
+    def _strip_reasoning(text: str) -> str:
+        """Remove <think>/<thinking> reasoning blocks (mirrors the frontend's
+        splitReasoning). The chat Thinking panel wants the tags, but non-chat
+        consumers — /expand image prompts, generic jobs, and tool-call JSON
+        parsing — want only the answer. The llama backend always closes the tag,
+        so a complete block is the normal case."""
+        return _THINK_RE.sub("", text).strip()
+
+    @staticmethod
     def _extract_json_object(text: str) -> dict[str, Any] | None:
         cleaned = text.strip()
         fenced = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", cleaned, re.IGNORECASE)
@@ -519,7 +536,7 @@ class Worker:
             job = await s.get(Job, snap.id)
             if job:
                 job.status = JobStatus.CANCELLED
-                job.finished_at = datetime.now(timezone.utc)
+                job.finished_at = datetime.now(UTC)
                 if text:
                     job.result = {"text": text}
             if snap.params.get("assistant_message_id"):
@@ -533,7 +550,7 @@ class Worker:
             if job:
                 job.status = JobStatus.ERROR
                 job.error = error
-                job.finished_at = datetime.now(timezone.utc)
+                job.finished_at = datetime.now(UTC)
             if snap.params.get("assistant_message_id"):
                 await self._write_chat_reply(s, snap, error, error=True)
         await self._bus.publish(Event(EventType.JOB_ERROR, job_id=snap.id, error=error))

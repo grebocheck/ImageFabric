@@ -7,13 +7,13 @@ used, so analysis cannot hide model downloads.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 import json
+from pathlib import Path
 import re
 import time
-import uuid
-from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
+import uuid
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -55,7 +55,7 @@ def _maps() -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
 
 
 def _day_dir() -> Path:
-    d = settings.outputs_dir / datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    d = settings.outputs_dir / datetime.now(UTC).strftime("%Y-%m-%d")
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -178,7 +178,7 @@ async def analyze_image(
         "vision_gpu_layers": settings.vision_gpu_layers,
         "duration_seconds": duration,
         "image_path": str(image_path),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
     meta_path = image_path.with_name(f"vision-{result_id}.json")
     meta_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")

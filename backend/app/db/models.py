@@ -4,9 +4,9 @@ can be resumed — a core requirement for the batch workflow.
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+import uuid
 
 from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -19,7 +19,7 @@ def _uuid() -> str:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Base(DeclarativeBase):
@@ -46,7 +46,7 @@ class Job(Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    images: Mapped[list["Image"]] = relationship(
+    images: Mapped[list[Image]] = relationship(
         back_populates="job", cascade="all, delete-orphan"
     )
 
@@ -84,7 +84,7 @@ class Conversation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 
-    messages: Mapped[list["Message"]] = relationship(
+    messages: Mapped[list[Message]] = relationship(
         back_populates="conversation",
         cascade="all, delete-orphan",
         order_by="Message.created_at",
@@ -159,7 +159,7 @@ class RagDocument(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 
-    chunks: Mapped[list["RagChunk"]] = relationship(
+    chunks: Mapped[list[RagChunk]] = relationship(
         back_populates="document",
         cascade="all, delete-orphan",
         order_by="RagChunk.chunk_index",

@@ -8,9 +8,10 @@ the GPU pipeline knows or cares about HTTP.
 from __future__ import annotations
 
 import asyncio
-import time
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
+import time
+from typing import Any
 
 from .enums import EventType
 

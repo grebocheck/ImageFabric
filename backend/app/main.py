@@ -14,6 +14,22 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from .api import (
+    chat,
+    code,
+    gallery,
+    jobs,
+    llm,
+    models,
+    notes,
+    presets,
+    rag,
+    transcription,
+    tts,
+    vision,
+    voice,
+    ws,
+)
 from .backends.registry import ModelRegistry
 from .config import settings
 from .core.arbiter import GpuArbiter
@@ -23,7 +39,6 @@ from .core.scheduler import Worker
 from .db.session import init_db
 from .services.embedding_service import embedding_service
 from .util import sysmon
-from .api import chat, code, gallery, jobs, llm, models, notes, presets, rag, transcription, tts, vision, voice, ws
 
 
 async def _mem_monitor(bus: EventBus) -> None:

@@ -11,12 +11,12 @@ is P6.2; until then ``/convert`` returns a clear error instead of faking a resul
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
+import subprocess
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+import httpx
 from pydantic import BaseModel
 
 from ..config import settings

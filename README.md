@@ -10,11 +10,17 @@ Target hardware: **RTX 5070 Ti 16 GB (Blackwell), 32 GB RAM, Windows 11**.
 
 ## Status
 
-**Architectural foundation — complete and verified in STUB mode.**
-The whole pipeline (model discovery → queue → arbiter swap → live progress over
-WebSocket → gallery with reproducible metadata) runs today **without** torch or
-llama.cpp. Real model loading is wired but lazy, and is turned on in milestone M0
-by flipping `HFAB_STUB_MODE=false` after the GPU stack is installed.
+**Working app — real-GPU validated (M0/M1).**
+The full pipeline (model discovery → queue → arbiter swap → live progress over
+WebSocket → gallery with reproducible metadata) runs on the GPU today: SDXL,
+FLUX (Nunchaku fp4), FLUX.2 [klein], and GGUF LLMs via llama-server, plus the
+chat / history / RAG / voice workspaces. See the [ROADMAP](ROADMAP.md) for the
+shipped milestones and the active backlog.
+
+The same pipeline also runs **without** torch or llama.cpp in **STUB mode**
+(`HFAB_STUB_MODE=true`) — used for UI work and as the basis for CI (see
+[Testing](#testing)). Real model loading is the default; `run.bat` / `run.ps1`
+run REAL mode, while `run.bat stub` forces STUB.
 
 ## License And Models
 
@@ -502,15 +508,37 @@ the backend with `HFAB_SDXL_TURBO_LORA=<path>`. The local M1 run used
 `models/lora/sdxl_lightning_4step_lora.safetensors`, `HFAB_SDXL_TURBO_STEPS=4`,
 and `HFAB_SDXL_TURBO_GUIDANCE=1.0`.
 
-## Next: milestone M0 (GPU bring-up)
+## Testing
 
-1. Install the Blackwell GPU stack:
-   ```powershell
-   .\.venv\Scripts\pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
-   .\.venv\Scripts\pip install -r backend\requirements-gpu.txt
-   ```
-   Verify: `python -c "import torch; print(torch.cuda.get_device_capability())"` → `(12, 0)`.
-2. Drop a CUDA(sm_120) `llama-server.exe` into `bin/llama/`.
-3. Set `HFAB_STUB_MODE=false` and generate one image with FLUX, one with SDXL,
-   and one LLM completion — the same UI, now backed by real models.
+The whole pipeline runs in STUB mode (no GPU/ML stack), so the memory-budget
+logic, the phase-batching scheduler, and the queue → arbiter swap → gallery flow
+are all testable on a plain machine. CI runs both suites on every push/PR
+(`.github/workflows/ci.yml`).
+
+**Backend** (pytest, stub mode — hermetic temp DB + dummy model files):
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\pip install -r requirements.txt pytest pytest-asyncio ruff
+.\.venv\Scripts\ruff check app tests
+.\.venv\Scripts\python -m pytest
 ```
+
+Key coverage: `tests/test_scheduler.py` (the *one-swap-per-mixed-batch* invariant),
+`tests/test_sysmon.py` (the RAM budget guard), `tests/test_model_profile.py`
+(learned-profile running max), and `tests/test_stub_integration.py` (the full
+queue → swap → gallery flow over an ASGI client).
+
+**Frontend** (vitest + Testing Library):
+
+```powershell
+cd frontend
+npm install
+npx tsc -b      # typecheck
+npm test        # vitest run
+```
+
+The runtime GPU checks above (`scripts/swap_leak_test.py`,
+`scripts/phase_batch_check.py`, `scripts/quality_ab.py`) complement these — they
+validate the *real* GPU path against a running backend.

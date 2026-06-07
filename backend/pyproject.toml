@@ -1,0 +1,35 @@
+# HFabric backend — tooling config (lint + tests).
+# The package itself is run from source (uvicorn app.main:app); this file only
+# centralizes ruff and pytest so contributors and CI share one standard.
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+extend-exclude = [".venv", "data"]
+
+[tool.ruff.lint]
+# A pragmatic set: pyflakes, pycodestyle, isort, bugbear, comprehensions,
+# pyupgrade. This is the enforceable green baseline; the rules below that would
+# need a manual sweep across existing code are deferred to the P11 cleanup.
+select = ["E", "F", "I", "B", "C4", "UP"]
+ignore = [
+    "E501",   # line length is enforced by the formatter, not the linter
+    "B008",   # FastAPI uses `Depends(...)` as a default-arg sentinel by design
+    # --- deferred to P11 code-health cleanup (manual judgment, not autofixable) ---
+    "B027",   # GpuBackend.request_stop is an intentional concrete no-op hook
+    "B904",   # `raise ... from` inside API except blocks (cosmetic chaining)
+    "B905",   # `zip(strict=...)` — equal lengths guaranteed at the call sites
+    "E741",   # a couple of `l` loop/lambda vars in the registry
+    "UP042",  # `class X(str, Enum)` -> StrEnum changes __str__ semantics
+]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

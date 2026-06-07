@@ -1,9 +1,10 @@
 # HFabric — Roadmap & Prioritized Backlog
 
-> Status: **working prototype.** Core arbiter, image + chat workspaces, and the
-> superapp shell are shipped and in real use. The next push is on our two
-> differentiators — the **memory arbiter** and the **comfort of the generation
-> pages** — plus a real **history/browse** experience.
+> Status: **working app, real-GPU validated (M0/M1).** The arbiter, image + chat
+> workspaces, history/browse, and the superapp shell are shipped and in real use.
+> What's left is genuinely *in-flight or unbuilt*: the **real-time voice changer**
+> (the one phase still in progress), an **engineering safety net** (there are no
+> automated tests yet), and the **loose ends** trailing the shipped phases.
 
 ## Objectives (in priority order)
 
@@ -35,142 +36,96 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
 
 ## Active backlog
 
-### P7 — Memory arbiter, depth (differentiator #1)
-
-> The arbiter works, but it is mostly *invisible* and uses *static* estimates.
-> This phase makes it observable and self-correcting — our edge over ComfyUI et al.
-
-- [x] **P7.1 — Arbiter decision transparency.** The arbiter/worker now emit a
-  structured `arbiter.note` event (`backend/app/core/enums.py` → `ARBITER_NOTE`)
-  with the reason: `swap` (unloading X for Y), `ram_budget` (predicted-vs-available
-  GB, still raises a clear `MemoryError`), and `voice_lane`/`idle` (queue parked /
-  resumed). The Queue header shows blocking reasons (`ram_budget`/`voice_lane`);
-  the System tab shows an Arbiter status panel. *Remaining:* per-job attribution on
-  the exact queued card, and a keep-warm-eviction reason.
-- [x] **P7.2 — Learned memory estimates.** After each real load the arbiter
-  records the model's measured RAM (incremental process RSS) and VRAM (process
-  reserved) from `load_report` into a `model_profiles` SQLite table (conservative
-  running max), primes a `sysmon` cache at startup, and the RAM-budget guard +
-  VRAM estimate now prefer the measurement (model-id keyed) over the static
-  `size_bytes × factor` heuristic — falling back only for never-loaded models.
-  Knobs: `HFAB_LEARN_MEMORY_PROFILES`, `HFAB_LEARNED_RAM_MARGIN_GB`. The Image
-  picker labels a learned VRAM figure "measured". *Remaining:* a UI list of
-  learned profiles and a reset control; LLM-subprocess VRAM (its report is `None`).
-- [x] **P7.3 — Memory-pressure timeline.** The System tab now keeps a rolling
-  buffer of `mem.status` samples (last ~90) and draws a sparkline of VRAM-used and
-  RAM-% with dashed **swap markers** where the resident model changed. *Remaining:*
-  optional process-RSS series and hover tooltips.
-- [x] **P7.4 — Swap-plan preview.** The phase-batching selection rule is now a
-  shared pure function (`scheduler.select_in_tier`) used by both the live worker
-  and a `plan_queue` simulator; `GET /api/jobs/plan` returns the predicted swap
-  count + run sequence, and the System tab shows it ("now → model ×n → …"). A
-  mixed batch correctly previews as one swap. *Remaining:* surface it inline on the
-  Images-tab queue too (currently image-only there).
-
-### P8 — Generation pages: functionality & comfort (differentiator #2)
-
-> Make the image and text pages genuinely pleasant to live in. Several of these
-> were carried over from P5.C/P5.D.
-
-- [x] **P8.1 — Persist the "Jobs" count.** `count` now saves into
-  `hfabric.image.composer` with the rest of the composer state (it was the one
-  control resetting to 1 on reload).
-- [x] **P8.2 — Image prompt-history recall.** The image composer now stores the
-  last 14 queued prompts in `hfabric.image.promptHistory` and exposes a compact
-  ↑ recall dropdown beside the Prompt label, mirroring the LLM composer's recent
-  prompt flow without taking over composer space.
-- [x] **P8.3 — Reproduce / vary from a result.** The History detail modal has
-  *Edit in composer* (restore full params + LoRA + seed; model re-resolved by name)
-  and *Variation* (same params, new seed). Wired through `ComposerApply` →
-  `ImageComposer.apply`. *Remaining:* a quick "reproduce" action on the Images-tab
-  `ResultPreview` card too.
-- [x] **P8.4 — Model & LoRA picker as cards** (was P5.D1). `ImageComposer.tsx`
-  now uses visual model cards with family / quant / measured-VRAM / loaded / slow
-  badges, and the LoRA picker is a compatible-card list with on/off toggles plus
-  inline weight sliders.
-- [ ] **P8.5 — Text page comfort.** gpt-oss Harmony `analysis`-channel parsing for
-  the Thinking panel (models that don't emit `<think>`); confirm how llama.cpp
-  surfaces it first.
-- [x] **P8.6 — In-dropdown search** for the shared `Select` (was the P5.C3
-  remainder). Shared `Select` now shows a focused search field for longer option
-  lists, filters labels/hints, and preserves keyboard navigation.
-- [x] **P8.7 — Chat copy/selection polish.** LLM markdown no longer smooth-scrolls
-  on every streamed token while the user is selecting text; inline monospace and
-  code blocks copy on a simple click, while drag-selection still wins.
-
-### P9 — History / browse rework (the dedicated viewer)
-
-> The current History tab (`Gallery.tsx`) is a single featured image + a flat
-> strip + metadata. The user wants a real **place to browse and search** the back
-> catalogue. This is a rebuild, not a tweak.
-
-- [x] **P9.1 — Grid gallery + paging.** `Gallery.tsx` is now a responsive
-  thumbnail grid (lazy `thumb_url`) that self-fetches `/api/images` with
-  `limit`/`offset` and a **Load more** button; tiles open a detail modal.
-- [x] **P9.2 — Filters.** Model, true family, date range (today/7d/30d),
-  size/orientation, LoRA, favorites, tags, and free-text prompt/seed search are
-  shown as removable chips and combinable. Backend: `model`/`family`/`size`/
-  `lora`/`favorite`/`tag`/`date_from`/`date_to` query params on `/api/images`;
-  `/api/images/stats` feeds the model, family, LoRA, and tag dropdown counts.
-- [x] **P9.3 — Favorites, tags, delete.** Single delete (row + files) ships via
-  `DELETE /api/images/{id}`; images now have `favorite` + free-text `tags`
-  columns with a tiny SQLite migration, `PATCH /api/images/{id}` metadata
-  updates, and History filters for favorites and tags.
-- [x] **P9.4 — Bulk + export.** Multi-select **Select** mode has bulk delete and
-  bulk ZIP export (`POST /api/images/export`, images + metadata JSON); per-item
-  PNG/JSON export + "Show in folder" remain in the detail modal.
-- [x] **P9.5 — Generation counters.** `/api/images/stats` returns total / today /
-  per-model counts; History header shows "N total · M today", per-model counts
-  feed the model filter, and the System tab now surfaces the same counters with
-  a compact per-model breakdown.
-
-### P6 — Real-time voice changer (in progress)
+### P6 — Real-time voice changer (in progress — the only live build)
 
 > Real-time voice conversion (mic → target voice → output). We **wrap w-okada /
 > MMVCServerSIO** (it owns the realtime duplex audio loop, device I/O, and
-> virtual-cable output) and build a cleaner control surface — the original gap the
-> user hit. Local install: `D:\MMVCServerSIO` (override `HFAB_VOICE_WOKADA_DIR`);
-> models in `<dir>\model_dir` as numbered slots. A live session **pins the GPU**,
-> so it gets a **voice lane** coordinated with the arbiter (refuse/park heavy jobs
-> while live), checked against the same `sysmon` budget.
+> virtual-cable output) and build a cleaner control surface. Local install:
+> `D:\MMVCServerSIO` (override `HFAB_VOICE_WOKADA_DIR`); models in `<dir>\model_dir`
+> as numbered slots. A live session **pins the GPU**, so it gets a **voice lane**
+> coordinated with the arbiter (refuse/park heavy jobs while live), checked against
+> the same `sysmon` budget.
+>
+> All four sub-items are wired but **none is validated against a real audio
+> stream** — that end-to-end validation is the gating work for this phase.
 
 - [~] **P6.1 — Voice detection shell.** Voice tab + `/api/voice/status` detect the
-  install, read `model_dir` slots, and probe the server. `/api/voice/convert` is
-  wired but gated (503 until the server is driven). *Remaining:* launch/manage the
-  server + drive its conversion API.
+  install, read `model_dir` slots, probe the server. `/api/voice/convert` is wired
+  but gated (503). *Remaining:* launch/manage the server + drive its conversion API.
 - [~] **P6.2 — Drive the w-okada server.** Launch/stop `MMVCServerSIO.exe` as a
   managed subprocess; proxy `GET /info`, `GET /performance`, `POST /update_settings`;
-  select a slot, set live params, start/stop the server-audio stream. Worker parks
-  queued jobs while voice is live and refuses a live start if a GPU job is running.
-  *Remaining:* latency measurement and richer performance display.
+  select a slot, set live params, start/stop the server-audio stream; park queued
+  GPU jobs while live. *Remaining:* latency measurement + richer performance display.
 - [~] **P6.3 — Output routing.** Input/output/monitor device pickers, sample-rate,
-  chunk-size, gain in the Voice tab from `/info`. See
-  [voice-routing.md](docs/voice-routing.md) for VB-CABLE/VoiceMeeter setup.
-  *Remaining:* validate selectors against a live audio session + friendlier
-  handling of unsupported sample-rate combos.
-- [~] **P6.4 — The UI (the differentiator).** Live metrics from `/performance`,
-  VU bars, rolling waveform, timing-stage breakdown, pitch/formant/index/protect
-  controls, latency/quality presets, bypass/PTT via w-okada `passThrough`.
-  *Remaining:* validate meters/timings against a real stream; tune stage labels.
+  chunk-size, gain from `/info`. See [voice-routing.md](docs/voice-routing.md).
+  *Remaining:* validate selectors against a live session + friendlier handling of
+  unsupported sample-rate combos.
+- [~] **P6.4 — The UI (the differentiator).** Live `/performance` metrics, VU bars,
+  rolling waveform, timing-stage breakdown, pitch/formant/index/protect controls,
+  latency/quality presets, bypass/PTT via `passThrough`. *Remaining:* validate
+  meters/timings against a real stream; tune stage labels.
 
-### P5 — UX polish, remaining tails
+### P10 — Test & CI safety net (new — engineering foundation)
 
-P5 is now complete:
+> The memory invariants above *are* the product, and there is currently **no
+> regression net**: zero automated tests, no CI, no committed lint/format config.
+> The `scripts/*` runners are manual checks against a live GPU backend, not unit
+> tests. Crucially, the whole pipeline already runs in **STUB mode with no GPU**,
+> so most of this is cheap to build and CI-friendly.
 
-- [x] **P5.A3 — Theme toggle (optional).** Light/dim/dark variants from the shared
-  tokens, persisted to `localStorage` next to `hfabric.view`.
-- [x] **P5.A2 tail — token migration.** Migrate scattered `violet-*` utilities to
-  the `accent` token (one-knob theming) and add radii/elevation + success/warn/
-  error color tokens.
-- [x] **P5.A1 tail — packaged window icon** for the VS Code-extension shell.
-- [x] **P5.B3 tail — list skeletons** while conversation/model lists fetch (with
-  per-list loading flags).
+- [x] **P10.1 — Unit tests for the pure logic.** No torch, no GPU
+  (`backend/tests/`): `scheduler.select_in_tier`/`plan_queue` (phase-batching
+  order + swap count) and `Worker._strip_reasoning` in `test_scheduler.py`;
+  `sysmon` budget math (predicted-vs-available; learned-vs-static, headroom,
+  keep-warm) in `test_sysmon.py`; `model_profile_service` conservative running-max
+  in `test_model_profile.py`. 31 cases.
+- [x] **P10.2 — STUB-mode integration test.** `test_stub_integration.py` drives
+  the real app over an httpx ASGI client with the lifespan running: posts a mixed
+  batch and asserts via the event bus that each family loads once and there is
+  exactly **one** swap, then that both images land in the gallery — the hermetic
+  `phase_batch_check.py`. Hermetic temp DB + dummy model files (conftest).
+- [x] **P10.3 — Frontend unit tests.** Vitest + Testing Library (`npm test`):
+  `Thinking.test.ts` (reasoning split states) and `Select.test.tsx` (open / filter
+  / choose / no-options). 11 cases. *Remaining:* composer-state (de)serialization.
+- [x] **P10.4 — CI workflow.** `.github/workflows/ci.yml` runs on push/PR:
+  backend `ruff check` + `pytest` (stub), frontend `tsc -b` + `vitest`.
 
-P5 design constraints (still binding): pure presentation — no resident model, no
-swap-behavior change, no touching the RAM/VRAM guard; animations stay GPU-cheap
-(CSS transforms/opacity); a new tab is still **one entry** in the `workspaces`
-array (P4.4 registry); every restyled control keeps keyboard operability + focus
-ring and respects `prefers-reduced-motion`.
+### P11 — Code health & docs (new)
+
+> Tidy debt that's accumulating quietly while features land.
+
+- [ ] **P11.1 — Decompose the oversized screens.** `ChatPanel.tsx` (~1125 lines),
+  `backends/image_diffusers.py` (~1004), `VoicePanel.tsx` (~749), `ImageComposer.tsx`
+  (~698). Extract hooks / sub-components / helper modules with **no behavior
+  change** so they stay reviewable.
+- [x] **P11.2 — Commit lint/format config.** `backend/pyproject.toml` now holds a
+  ruff config (E/F/I/B/C4/UP, with the manual-judgment rules deferred and
+  documented) and the pytest config; 75 mechanical issues auto-fixed across the
+  backend so the tree is green and CI-enforceable. Frontend gets `vitest` wired in
+  `vite.config.ts` + `package.json`. *Remaining:* frontend eslint/prettier.
+- [x] **P11.3 — Sync the docs with reality.** `README.md` "Status" now reflects the
+  real-GPU-validated M0/M1 state and the actual STUB/REAL default story; the stale
+  "Next: milestone M0" section is replaced by a **Testing** section pointing at the
+  new suites + CI. *Remaining:* generating the giant knob table from `/api/settings`
+  instead of hand-maintaining it.
+
+### P12 — Generation-page & arbiter loose ends (new — gathers shipped-phase tails)
+
+> The shipped P7/P8/P9 phases each left a small, named remainder. Collected here so
+> they don't get lost in the "Shipped" log.
+
+- [ ] **P12.1 — Learned-profile management.** A UI list of learned `model_profiles`
+  with a reset control (P7.2 tail), plus capture LLM-subprocess VRAM (its
+  `load_report` is currently `None`, so the LLM is the one model with no measured
+  figure).
+- [ ] **P12.2 — Per-job arbiter attribution.** Surface the blocking/swap reason on
+  the *exact* queued card (not just the Queue header) and add a keep-warm-eviction
+  reason (P7.1 tail).
+- [ ] **P12.3 — Inline previews on the Images tab.** Show the swap-plan preview
+  inline on the Images-tab queue (P7.4 tail) and add a quick reproduce/vary action
+  on the `ResultPreview` card (P8.3 tail).
+- [ ] **P12.4 — Memory timeline depth.** Optional process-RSS series + hover
+  tooltips on the System-tab sparkline (P7.3 tail).
 
 ---
 
@@ -217,12 +172,36 @@ Done and in use. Kept terse on purpose — detailed run logs live in
   tools; command palette (Ctrl+K), search, export, System monitor, declarative
   **workspace registry**; import bundles; Notes, TTS, Code, Transcribe, RAG (local
   embeddings), and Vision workspaces (all model-gated, CPU-first, GPU-arbiter-safe).
-- **P5 (most) — UX polish.** Brand mark + favicon; Tailwind 4 `@theme` tokens;
-  global activity indicator + header VRAM bar; animated denoise preview; skeletons,
+- **P5 — UX polish.** Brand mark + favicon; Tailwind 4 `@theme` tokens (one-knob
+  `accent`, radii/elevation + status colors); light/dim/dark theme toggle; global
+  activity indicator + header VRAM bar; animated denoise preview; skeletons,
   toasts, fade-ins (with `prefers-reduced-motion` reset); Thinking/reasoning panel;
   composer ergonomics (auto-grow, token/context meter, quick-switch chips, LLM
   prompt-history); shared keyboard-navigable `Select`/`Toggle`/`Badge`/`Slider`
-  control kit replacing every native `<select>`; shared workspace chrome.
+  control kit replacing every native `<select>`; shared workspace chrome; packaged
+  window icon for the VS Code-extension shell.
+- **P7 — Memory arbiter depth.** Structured `arbiter.note` events (swap / ram_budget
+  / voice_lane / idle) surfaced in the Queue header + System Arbiter panel; learned
+  per-model RAM/VRAM profiles in a `model_profiles` SQLite table (conservative
+  running max) that the RAM-budget guard + VRAM estimate prefer over the static
+  heuristic (`HFAB_LEARN_MEMORY_PROFILES`, `HFAB_LEARNED_RAM_MARGIN_GB`);
+  memory-pressure sparkline with swap markers; swap-plan preview via the shared
+  pure `scheduler.select_in_tier` + `GET /api/jobs/plan`. *Tails → P12.*
+- **P8 — Generation pages: functionality & comfort.** Persisted "Jobs" count;
+  image prompt-history recall (↑ dropdown); reproduce/vary from a result
+  (Edit-in-composer + Variation); model & LoRA pickers as cards with measured-VRAM
+  badges; Harmony (gpt-oss) `reasoning_content` re-wrapped as `<think>` for the
+  Thinking panel (and stripped via `_strip_reasoning` everywhere it would pollute a
+  prompt/tool-call JSON — `/expand`, generic jobs, tool-call parsing — with the tag
+  always closed even on a cut-short stream); in-dropdown search for the shared
+  `Select`; chat copy/selection polish. *Tails → P12.*
+- **P9 — History / browse rework.** Responsive thumbnail grid (lazy `thumb_url`,
+  `limit`/`offset` + Load-more) with a detail modal; combinable filter chips
+  (model/family/date/size/LoRA/favorites/tags/free-text) backed by `/api/images`
+  query params + `/api/images/stats`; favorites + free-text tags + single delete
+  (`PATCH`/`DELETE /api/images/{id}`); multi-select bulk delete + ZIP export
+  (`POST /api/images/export`); generation counters (total/today/per-model) in the
+  History header + System tab.
 - **Images page rebuild + reliability.** Two-column composer | (result + queue);
   scroll/visibility fix; robust lightbox; composer persistence
   (`hfabric.image.composer`); cancel running jobs (`request_stop` →
@@ -259,3 +238,5 @@ Done and in use. Kept terse on purpose — detailed run logs live in
 - Anything touching model loading goes through the arbiter (`ensure`/`free_all`)
   and the `sysmon` budget — never load a model directly.
 - New env knobs follow the `HFAB_*` convention and are surfaced in `/api/settings`.
+</content>
+</invoke>

@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, loadEnv } from "vite";
@@ -40,6 +41,12 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
+    test: {
+      // Component tests run in a DOM; pure-logic tests ignore it harmlessly.
+      environment: "jsdom",
+      include: ["src/**/*.test.{ts,tsx}"],
+      restoreMocks: true,
+    },
     server: {
       host: env("HFAB_FRONTEND_HOST", "") || undefined,
       port: Number(env("HFAB_FRONTEND_PORT", "5173")),

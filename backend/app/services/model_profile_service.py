@@ -7,7 +7,7 @@ a conservative running *max* so a single low sample never under-predicts.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +37,7 @@ async def record(
     if vram_gb is not None:
         prof.vram_gb = max(prof.vram_gb or 0.0, vram_gb)
     prof.samples += 1
-    prof.updated_at = datetime.now(timezone.utc)
+    prof.updated_at = datetime.now(UTC)
     return prof
 
 

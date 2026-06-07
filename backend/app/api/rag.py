@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import re
-from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
@@ -16,7 +16,8 @@ from ..services.embedding_service import (
     embedding_service,
     list_embedding_models,
 )
-from ..services.rag_service import resolve_embedding_model_id, search_documents as run_rag_search
+from ..services.rag_service import resolve_embedding_model_id
+from ..services.rag_service import search_documents as run_rag_search
 from .deps import get_session
 
 router = APIRouter(prefix="/api/rag", tags=["rag"])
@@ -36,7 +37,7 @@ class RagSearchIn(BaseModel):
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _title(value: str | None, fallback: str = "Untitled document") -> str:

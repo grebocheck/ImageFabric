@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -155,7 +155,7 @@ async def stats(session: AsyncSession) -> dict:
     """Generation counters for the History header: total, today, per-model."""
     total = (await session.execute(select(func.count(Image.id)))).scalar_one()
 
-    start_of_day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    start_of_day = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
     today = (await session.execute(
         select(func.count(Image.id)).where(Image.created_at >= start_of_day)
     )).scalar_one()

@@ -8,12 +8,12 @@ side effects.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 import json
+from pathlib import Path
 import re
 import time
 import uuid
-from datetime import datetime, timezone
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
@@ -51,7 +51,7 @@ def _model_map() -> dict[str, dict]:
 
 
 def _day_dir() -> Path:
-    d = settings.outputs_dir / datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    d = settings.outputs_dir / datetime.now(UTC).strftime("%Y-%m-%d")
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -154,7 +154,7 @@ async def generate_tts(body: TtsGenerateIn) -> dict:
         "tts_gpu_layers": settings.tts_gpu_layers,
         "duration_seconds": duration,
         "output_path": str(out_path),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
     meta_path = out_path.with_suffix(".json")
     meta_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")

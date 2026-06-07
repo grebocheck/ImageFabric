@@ -9,8 +9,8 @@ while SDXL has UNet ``input_blocks`` under ``model.diffusion_model``.
 from __future__ import annotations
 
 import json
-import struct
 from pathlib import Path
+import struct
 
 from ..core.enums import ModelFamily
 

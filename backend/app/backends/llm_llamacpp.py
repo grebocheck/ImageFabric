@@ -97,7 +97,7 @@ class LlamaCppBackend(LLMBackend):
             self._proc.terminate()
             try:
                 await asyncio.wait_for(self._proc.wait(), timeout=10.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._proc.kill()
                 await self._proc.wait()
         self._proc = None
@@ -154,7 +154,23 @@ class LlamaCppBackend(LLMBackend):
             payload["top_k"] = int(params["top_k"])
         if params.get("stop"):
             payload["stop"] = params["stop"]
+        import json  # noqa: PLC0415
+
         chunks: list[str] = []
+
+        async def emit(piece: str) -> None:
+            chunks.append(piece)
+            if on_token:
+                await on_token(piece)
+
+        # Harmony models (gpt-oss) don't wrap their chain-of-thought in <think>
+        # tags; llama-server surfaces it in a separate `reasoning_content` delta
+        # field while the user-facing answer streams in `content`. We re-wrap the
+        # reasoning in <think>…</think> so the frontend's existing reasoning split
+        # (Thinking.tsx) renders it in the collapsible panel — same as DeepSeek-R1
+        # / Qwen, which emit the tags inline themselves.
+        in_reasoning = False
+        reasoning_closed = False
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream(
                 "POST", f"{self._base_url}/v1/chat/completions", json=payload
@@ -168,14 +184,28 @@ class LlamaCppBackend(LLMBackend):
                     data = line[5:].strip()
                     if data == "[DONE]":
                         break
-                    import json  # noqa: PLC0415
 
                     try:
-                        delta = json.loads(data)["choices"][0]["delta"].get("content", "")
+                        delta = json.loads(data)["choices"][0]["delta"]
                     except (KeyError, IndexError, json.JSONDecodeError):
                         continue
-                    if delta:
-                        chunks.append(delta)
-                        if on_token:
-                            await on_token(delta)
+
+                    reasoning = delta.get("reasoning_content") or ""
+                    content = delta.get("content") or ""
+
+                    if reasoning and not reasoning_closed:
+                        if not in_reasoning:
+                            in_reasoning = True
+                            await emit("<think>")
+                        await emit(reasoning)
+                    if content:
+                        if in_reasoning and not reasoning_closed:
+                            reasoning_closed = True
+                            await emit("</think>")
+                        await emit(content)
+
+        # Reasoning with no following answer (e.g. cut short) — close the block so
+        # the frontend doesn't treat the whole reply as still-active reasoning.
+        if in_reasoning and not reasoning_closed:
+            await emit("</think>")
         return "".join(chunks).strip()

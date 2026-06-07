@@ -15,21 +15,21 @@ from ..backends.registry import ModelRegistry
 from ..core.enums import EventType, JobType
 from ..core.events import EventBus
 from ..core.scheduler import Worker
+from ..db.models import Conversation, Message
 from ..schemas import (
-    ChatSend,
     ChatImportIn,
     ChatImportOut,
+    ChatSend,
     ChatSendOut,
     ConversationCreate,
     ConversationDetailOut,
     ConversationOut,
     ConversationUpdate,
     ImageChatSend,
+    JobCreate,
     MessageOut,
 )
-from ..db.models import Conversation, Message
 from ..services import chat_service, queue_service
-from ..schemas import JobCreate
 from .deps import get_bus, get_registry, get_session, get_worker
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])

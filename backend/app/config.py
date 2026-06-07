@@ -8,9 +8,9 @@ file (prefix ``HFAB_``).
 
 from __future__ import annotations
 
-import sys
 from functools import lru_cache
 from pathlib import Path
+import sys
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict

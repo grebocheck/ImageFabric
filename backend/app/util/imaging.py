@@ -7,8 +7,8 @@ so any image can be traced back to its exact prompt/seed/settings.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import json
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +16,7 @@ from PIL import Image, ImageDraw, PngImagePlugin
 
 
 def day_dir(outputs_dir: Path) -> Path:
-    d = outputs_dir / datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    d = outputs_dir / datetime.now(UTC).strftime("%Y-%m-%d")
     d.mkdir(parents=True, exist_ok=True)
     return d
 

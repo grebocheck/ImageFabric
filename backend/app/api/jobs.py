@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..backends.base import ModelDescriptor
@@ -13,8 +14,6 @@ from ..core.arbiter import GpuArbiter
 from ..core.enums import EventType, JobStatus, JobType
 from ..core.events import EventBus
 from ..core.scheduler import Worker, plan_queue
-from pydantic import BaseModel
-
 from ..schemas import JobCreate, JobOut, PriorityUpdate
 from ..services import prompt_service, queue_service
 from .deps import get_arbiter, get_bus, get_registry, get_session, get_worker

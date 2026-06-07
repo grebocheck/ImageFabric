@@ -7,15 +7,15 @@ under models/transcribe and never asks Whisper libraries to download weights.
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 import importlib
 import importlib.util
 import json
+from pathlib import Path
 import re
 import time
-import uuid
-from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
+import uuid
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
@@ -93,7 +93,7 @@ def _model_map() -> dict[str, dict[str, Any]]:
 
 
 def _day_dir() -> Path:
-    d = settings.outputs_dir / datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    d = settings.outputs_dir / datetime.now(UTC).strftime("%Y-%m-%d")
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -190,7 +190,7 @@ async def transcribe_audio(
         "task": task,
         "duration_seconds": duration,
         "audio_path": str(audio_path),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         **result,
     }
     meta_path = audio_path.with_name(f"transcription-{transcription_id}.json")
