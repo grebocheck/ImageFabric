@@ -13,11 +13,12 @@ import {
   DEFAULT_SIZE,
   DEFAULT_STEPS,
   familyColor,
-  FLUX2_GUIDANCE,
-  FLUX2_SIZE,
-  FLUX2_STEPS,
   formatSize,
+  imageFamilyDefaults,
   imageModelRank,
+  isKnownGuidanceDefault,
+  isKnownSizeDefault,
+  isKnownStepDefault,
   isLoraCompatible,
   isNunchaku,
   loadPromptHistory,
@@ -130,11 +131,12 @@ export function ImageComposer({
   }, [loras, selectedImgModel]);
 
   useEffect(() => {
-    if (selectedFamily !== "flux2") return;
-    setSteps((value) => value === DEFAULT_STEPS ? FLUX2_STEPS : value);
-    setGuidance((value) => value === DEFAULT_GUIDANCE ? FLUX2_GUIDANCE : value);
-    setWidth((value) => value === DEFAULT_SIZE ? FLUX2_SIZE : value);
-    setHeight((value) => value === DEFAULT_SIZE ? FLUX2_SIZE : value);
+    const defaults = imageFamilyDefaults(selectedFamily);
+    if (!defaults) return;
+    setSteps((value) => isKnownStepDefault(value) ? defaults.steps : value);
+    setGuidance((value) => isKnownGuidanceDefault(value) ? defaults.guidance : value);
+    setWidth((value) => isKnownSizeDefault(value) ? defaults.width : value);
+    setHeight((value) => isKnownSizeDefault(value) ? defaults.height : value);
   }, [selectedFamily]);
 
   const useImg2img = img2imgSupported && initImage !== null;
@@ -197,7 +199,7 @@ export function ImageComposer({
   };
 
   const applyRatio = (rw: number, rh: number) => {
-    const base = selectedFamily === "flux2" ? FLUX2_SIZE : DEFAULT_SIZE;
+    const base = imageFamilyDefaults(selectedFamily)?.width ?? DEFAULT_SIZE;
     const round64 = (n: number) => Math.max(64, Math.round(n / 64) * 64);
     if (rw >= rh) {
       setWidth(round64(base));
@@ -406,6 +408,14 @@ export function ImageComposer({
           ) : selectedFamily === "flux2" ? (
             <Notice tone="sky">
               FLUX.2 klein is tuned here for 768x768, 6 steps, guidance 4.0. Negative prompt is ignored.
+            </Notice>
+          ) : selectedFamily === "qwen-image" ? (
+            <Notice tone="sky">
+              Qwen-Image-2512 is tuned here for 1328x1328, 50 steps, true CFG 4.0. The backend defaults to bnb-nf4.
+            </Notice>
+          ) : selectedFamily === "z-image" ? (
+            <Notice tone="sky">
+              Z-Image-Turbo is tuned here for 1024x1024, 9 steps, guidance 0.0.
             </Notice>
           ) : null}
         </section>

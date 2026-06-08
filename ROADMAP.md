@@ -233,6 +233,10 @@ Done and in use. Kept terse on purpose — detailed run logs live in
   Knobs: `HFAB_FLUX2_QUANT/_OFFLOAD/_DEFAULT_STEPS/_GUIDANCE/_WIDTH/_HEIGHT`. Enable
   by dropping the multi-file klein repo under `models/image/` (auto-detected by
   `model_index.json`). FLUX.2 [dev] (32B + Mistral-24B) is out of scope.
+- **P3.4 — Qwen/Z-Image image families.** Added `ModelFamily.QWEN_IMAGE` and
+  `ModelFamily.Z_IMAGE` for multi-file Diffusers repos detected by
+  `model_index.json`. Qwen-Image-2512 defaults to bnb-nf4 + 1328² / 50 steps /
+  true CFG 4.0; Z-Image-Turbo defaults to 1024² / 9 steps / guidance 0.0.
 - **P4 — Chat workspace & superapp shell.** Real chat (persistent conversations,
   markdown/code, stop/regenerate/edit, sampling + personas + tok/s + TTFT);
   chat→image bridge (`/image …`) + model-driven `generate_image`/`search_documents`
@@ -295,6 +299,9 @@ Done and in use. Kept terse on purpose — detailed run logs live in
   cycles so these aren't flagged.
 - When the validated FLUX.2 repo *folder* exists, the registry hides the original
   single-file `.safetensors` so it's a conversion source, not a duplicate target.
+- Qwen-Image-2512 is a large bf16 repo (~54 GB of model files); keep
+  `HFAB_QWEN_IMAGE_QUANT=bnb-nf4` unless deliberately testing full bf16.
+  Z-Image-Turbo is distilled; use guidance 0.0 unless comparing variants.
 
 ---
 

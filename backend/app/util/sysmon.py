@@ -133,6 +133,12 @@ def estimate_ram_need_gb(
         # margin tracks reality. The old 0.4x + 3 over-predicted ~16 GB and
         # caused false pre-load refusals on a 32 GB box with a warm allocator.
         return gb * 0.3 + 1.5
+    if family is ModelFamily.QWEN_IMAGE:
+        if quant and quant.startswith("bnb-"):
+            return gb * 0.25 + 3.0
+        return gb * 0.65 + 2.0
+    if family is ModelFamily.Z_IMAGE:
+        return gb * 0.8 + 2.0
     if _is_nunchaku_quant(quant):
         return gb + 4.0  # + the int4 T5 (~3 GB) and headroom
     return gb * 1.3  # diffusers single-file materialization overhead
@@ -155,6 +161,10 @@ def estimate_vram_need_gb(
         return 8.0  # SVDQuant transformer + bnb Qwen3 text encoder (target)
     if family is ModelFamily.FLUX2:
         return 13.0  # klein 9B bnb 4-bit + model offload (estimate)
+    if family is ModelFamily.QWEN_IMAGE:
+        return 15.0 if quant and quant.startswith("bnb-") else 16.0
+    if family is ModelFamily.Z_IMAGE:
+        return 15.0
     if family is ModelFamily.SDXL:
         return round(min(12.5, max(8.0, gb * 1.65)), 1)
     if family is ModelFamily.GGUF:

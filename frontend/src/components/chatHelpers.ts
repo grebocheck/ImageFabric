@@ -60,6 +60,7 @@ export function modelTitle(model: Model): string {
 export function pickImageModel(models: Model[]): Model | undefined {
   const img = models.filter((m) => m.job_type === "image");
   return img.find((m) => m.family === "flux2")
+    ?? img.find((m) => m.family === "z-image")
     ?? img.find((m) => m.quant?.startsWith("nunchaku"))
     ?? img.find((m) => !m.slow)
     ?? img[0];

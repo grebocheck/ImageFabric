@@ -6,6 +6,8 @@ export type View = "images" | "history" | "llm" | "notes" | "tts" | "transcripti
 const familyColor: Record<string, string> = {
   flux: "bg-accent",
   flux2: "bg-sky-600",
+  "qwen-image": "bg-violet-600",
+  "z-image": "bg-cyan-600",
   sdxl: "bg-pink-600",
   gguf: "bg-emerald-600",
 };

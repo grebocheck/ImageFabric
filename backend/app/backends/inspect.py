@@ -46,18 +46,42 @@ def classify_image_model(path: Path) -> ModelFamily:
         return ModelFamily.UNKNOWN
 
 
+def _diffusers_pipeline_class(path: Path) -> str | None:
+    index = path / "model_index.json"
+    if not index.is_file():
+        return None
+    try:
+        data = json.loads(index.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    cls = data.get("_class_name")
+    return str(cls) if cls else None
+
+
+def classify_diffusers_dir(path: Path) -> ModelFamily | None:
+    """Classify multi-file Diffusers repo folders by ``model_index.json``.
+
+    Folder scans must stay metadata-only: Qwen/Z-Image/FLUX.2 all keep their
+    heavy weights in sharded subfolders, so the registry should never open those
+    tensors just to list available models.
+    """
+    cls = _diffusers_pipeline_class(path)
+    if cls is None:
+        return None
+    if "Flux2" in cls:
+        return ModelFamily.FLUX2
+    if "QwenImage" in cls:
+        return ModelFamily.QWEN_IMAGE
+    if "ZImage" in cls:
+        return ModelFamily.Z_IMAGE
+    return None
+
+
 def is_flux2_dir(path: Path) -> bool:
     """FLUX.2 [klein] ships as a multi-file diffusers repo (not a single
     .safetensors), so we detect it by a ``model_index.json`` whose pipeline
     class is a Flux2 variant."""
-    index = path / "model_index.json"
-    if not index.is_file():
-        return False
-    try:
-        data = json.loads(index.read_text(encoding="utf-8"))
-    except Exception:
-        return False
-    return "Flux2" in str(data.get("_class_name", ""))
+    return classify_diffusers_dir(path) is ModelFamily.FLUX2
 
 
 def classify_lora_model(path: Path) -> ModelFamily | None:

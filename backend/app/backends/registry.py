@@ -15,7 +15,7 @@ from ..core.enums import ModelFamily
 from ..util import sysmon
 from .base import GpuBackend, LoraDescriptor, ModelDescriptor
 from .image_diffusers import DiffusersImageBackend
-from .inspect import classify_image_model, classify_lora_model, is_flux2_dir
+from .inspect import classify_diffusers_dir, classify_image_model, classify_lora_model
 from .llm_llamacpp import LlamaCppBackend
 
 LORA_EXTENSIONS = {".safetensors", ".pt", ".bin"}
@@ -61,10 +61,12 @@ class ModelRegistry:
     def scan(self) -> None:
         self._descriptors.clear()
         self._loras.clear()
-        flux2_dirs = sorted(
-            sub for sub in settings.image_models_dir.iterdir()
-            if sub.is_dir() and is_flux2_dir(sub)
+        diffusers_dirs = sorted(
+            (sub, family)
+            for sub in settings.image_models_dir.iterdir()
+            if sub.is_dir() and (family := classify_diffusers_dir(sub)) is not None
         )
+        flux2_dirs = [sub for sub, family in diffusers_dirs if family is ModelFamily.FLUX2]
         for path in _image_safetensors_paths(settings.image_models_dir):
             name = path.stem.lower()
             if "svdq" in name or "nunchaku" in name:
@@ -84,9 +86,15 @@ class ModelRegistry:
                     continue
                 quant = settings.flux2_quant if fam is ModelFamily.FLUX2 else None
                 self._add(path, fam, quant=quant)
-        # FLUX.2 [klein] is a multi-file diffusers repo dropped in as a folder.
-        for sub in flux2_dirs:
-            self._add(sub, ModelFamily.FLUX2, quant=settings.flux2_quant)
+        # Multi-file Diffusers repos (FLUX.2 [klein], Qwen-Image, Z-Image).
+        for sub, family in diffusers_dirs:
+            if family is ModelFamily.FLUX2:
+                quant = settings.flux2_quant
+            elif family is ModelFamily.QWEN_IMAGE:
+                quant = settings.qwen_image_quant
+            else:
+                quant = None
+            self._add(sub, family, quant=quant)
         for path in sorted(settings.llm_models_dir.glob("*.gguf")):
             self._add(path, ModelFamily.GGUF)
         for root in self._lora_scan_roots():

@@ -197,6 +197,23 @@ class Settings(BaseSettings):
     # tokenizer and config come from this (license-gated) repo.
     flux2_klein_repo: str = "black-forest-labs/FLUX.2-klein-9B"
 
+    # --- Qwen-Image-2512 / Z-Image-Turbo (multi-file Diffusers repos) ---
+    # Qwen-Image-2512 is large (~54 GB of bf16 shards), so default to
+    # bitsandbytes 4-bit for the transformer + text encoder and model offload.
+    # Z-Image-Turbo is an 8-step distilled model; the official recipe uses
+    # guidance 0.0 and 1024^2 output.
+    qwen_image_quant: str = "bnb-nf4"     # bnb-nf4 | bnb-fp4 | none (bf16)
+    qwen_image_offload: str = "model"     # model | sequential | none
+    qwen_image_default_steps: int = 50
+    qwen_image_default_guidance: float = 4.0  # sent as true_cfg_scale
+    qwen_image_default_width: int = 1328
+    qwen_image_default_height: int = 1328
+    z_image_offload: str = "model"        # model | sequential | none
+    z_image_default_steps: int = 9
+    z_image_default_guidance: float = 0.0  # Turbo model wants CFG off
+    z_image_default_width: int = 1024
+    z_image_default_height: int = 1024
+
     # --- image acceleration ---
     # P1.1: Opt-in compile because Blackwell compile can spike RAM/VRAM during
     # graph capture. When enabled, the backend records before/after memory in

@@ -93,6 +93,10 @@ class DiffusersImageBackend(ImageBackend):
             pipe = self._load_nunchaku_flux2_klein(torch)
         elif self.descriptor.family is ModelFamily.FLUX2:
             pipe = self._load_flux2_klein(torch)
+        elif self.descriptor.family is ModelFamily.QWEN_IMAGE:
+            pipe = self._load_qwen_image(torch)
+        elif self.descriptor.family is ModelFamily.Z_IMAGE:
+            pipe = self._load_z_image(torch)
         elif self._is_nunchaku_quant():
             pipe = self._load_nunchaku_flux(torch)
         elif self.descriptor.family is ModelFamily.FLUX:
@@ -160,6 +164,102 @@ class DiffusersImageBackend(ImageBackend):
         pipe.vae.enable_tiling()
         pipe.enable_model_cpu_offload()
         return pipe
+
+    def _load_qwen_image(self, torch) -> Any:
+        """Qwen-Image-2512 multi-file Diffusers repo.
+
+        The full bf16 repo is large, so the default path quantizes transformer
+        and text encoder through Diffusers' bitsandbytes loader and uses model
+        offload. Generation maps the UI guidance field to Qwen's true_cfg_scale.
+        """
+        from diffusers import QwenImagePipeline  # noqa: PLC0415
+
+        kwargs = self._quantized_repo_kwargs(
+            torch,
+            settings.qwen_image_quant,
+            "HFAB_QWEN_IMAGE_QUANT",
+            ["transformer", "text_encoder"],
+        )
+        pipe = QwenImagePipeline.from_pretrained(str(self.descriptor.path), **kwargs)
+        if hasattr(getattr(pipe, "vae", None), "enable_tiling"):
+            pipe.vae.enable_tiling()
+        quant = settings.qwen_image_quant.lower().strip()
+        if quant in ("bnb-nf4", "bnb-fp4"):
+            if hasattr(getattr(pipe, "vae", None), "to"):
+                pipe.vae.to("cuda")
+            placement = "bnb-loader"
+        else:
+            self._place_repo_pipeline(pipe, settings.qwen_image_offload, "HFAB_QWEN_IMAGE_OFFLOAD")
+            placement = settings.qwen_image_offload
+        self._active_features["qwen_image"] = {
+            "quant": settings.qwen_image_quant,
+            "offload": settings.qwen_image_offload,
+            "placement": placement,
+            "guidance_arg": "true_cfg_scale",
+        }
+        return pipe
+
+    def _load_z_image(self, torch) -> Any:
+        """Z-Image-Turbo multi-file Diffusers repo."""
+        from diffusers import ZImagePipeline  # noqa: PLC0415
+
+        pipe = ZImagePipeline.from_pretrained(
+            str(self.descriptor.path),
+            torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=False,
+        )
+        if hasattr(getattr(pipe, "vae", None), "enable_tiling"):
+            pipe.vae.enable_tiling()
+        self._place_repo_pipeline(pipe, settings.z_image_offload, "HFAB_Z_IMAGE_OFFLOAD")
+        self._active_features["z_image"] = {
+            "offload": settings.z_image_offload,
+            "default_steps": settings.z_image_default_steps,
+            "default_guidance": settings.z_image_default_guidance,
+        }
+        return pipe
+
+    @staticmethod
+    def _quantized_repo_kwargs(
+        torch,
+        quant: str,
+        env_name: str,
+        components_to_quantize: list[str],
+    ) -> dict[str, Any]:
+        quant = quant.lower().strip()
+        if quant not in ("bnb-nf4", "bnb-fp4", "", "none", "bf16"):
+            raise ValueError(
+                f"{env_name} must be one of: bnb-nf4, bnb-fp4, none "
+                f"(got {quant!r})"
+            )
+        kwargs: dict[str, Any] = {"torch_dtype": torch.bfloat16}
+        if quant in ("bnb-nf4", "bnb-fp4"):
+            from diffusers import PipelineQuantizationConfig  # noqa: PLC0415
+
+            kwargs["quantization_config"] = PipelineQuantizationConfig(
+                quant_backend="bitsandbytes_4bit",
+                quant_kwargs={
+                    "load_in_4bit": True,
+                    "bnb_4bit_quant_type": "nf4" if quant == "bnb-nf4" else "fp4",
+                    "bnb_4bit_compute_dtype": torch.bfloat16,
+                },
+                components_to_quantize=components_to_quantize,
+            )
+        return kwargs
+
+    @staticmethod
+    def _place_repo_pipeline(pipe: Any, offload: str, env_name: str) -> None:
+        offload = offload.lower().strip()
+        if offload == "sequential":
+            pipe.enable_sequential_cpu_offload()
+        elif offload in ("", "none"):
+            pipe.to("cuda")
+        elif offload == "model":
+            pipe.enable_model_cpu_offload()
+        else:
+            raise ValueError(
+                f"{env_name} must be one of: model, sequential, none "
+                f"(got {offload!r})"
+            )
 
     def _load_flux2_klein(self, torch) -> Any:
         """FLUX.2 [klein] via diffusers (nunchaku has no FLUX.2 transformer yet).
@@ -837,11 +937,13 @@ class DiffusersImageBackend(ImageBackend):
                         "width": width,
                         "height": height,
                         "callback_on_step_end": _step_cb_flux2
-                        if self.descriptor.family is ModelFamily.FLUX2
+                        if self.descriptor.family in (ModelFamily.FLUX2, ModelFamily.QWEN_IMAGE, ModelFamily.Z_IMAGE)
                         else _step_cb,
                     }
                     if self.descriptor.family is ModelFamily.FLUX2:
                         call_kwargs.pop("negative_prompt", None)
+                    elif self.descriptor.family is ModelFamily.QWEN_IMAGE:
+                        call_kwargs["true_cfg_scale"] = call_kwargs.pop("guidance_scale")
                     out = self._pipe(**call_kwargs)
             return out.images[0]
 
@@ -923,8 +1025,21 @@ class DiffusersImageBackend(ImageBackend):
         return self._inpaint_pipe
 
     def _dimension(self, params: dict[str, Any], key: str, default: int, flux2_default: int) -> int:
-        if self.descriptor.family is ModelFamily.FLUX2 and key not in params:
-            return flux2_default
+        if key not in params:
+            if self.descriptor.family is ModelFamily.FLUX2:
+                return flux2_default
+            if self.descriptor.family is ModelFamily.QWEN_IMAGE:
+                return (
+                    settings.qwen_image_default_width
+                    if key == "width"
+                    else settings.qwen_image_default_height
+                )
+            if self.descriptor.family is ModelFamily.Z_IMAGE:
+                return (
+                    settings.z_image_default_width
+                    if key == "width"
+                    else settings.z_image_default_height
+                )
         return int(params.get(key, default))
 
     def _steps(self, params: dict[str, Any]) -> int:
@@ -932,6 +1047,10 @@ class DiffusersImageBackend(ImageBackend):
         untouched = "steps" not in params or steps == settings.default_steps
         if self.descriptor.family is ModelFamily.FLUX2 and untouched:
             return settings.flux2_default_steps
+        if self.descriptor.family is ModelFamily.QWEN_IMAGE and untouched:
+            return settings.qwen_image_default_steps
+        if self.descriptor.family is ModelFamily.Z_IMAGE and untouched:
+            return settings.z_image_default_steps
         if self._active_features.get("sdxl_turbo_lora") and params.get("turbo", True):
             if untouched:
                 return settings.sdxl_turbo_steps
@@ -942,6 +1061,10 @@ class DiffusersImageBackend(ImageBackend):
         untouched = "guidance" not in params or guidance == settings.default_guidance
         if self.descriptor.family is ModelFamily.FLUX2 and untouched:
             return settings.flux2_default_guidance
+        if self.descriptor.family is ModelFamily.QWEN_IMAGE and untouched:
+            return settings.qwen_image_default_guidance
+        if self.descriptor.family is ModelFamily.Z_IMAGE and untouched:
+            return settings.z_image_default_guidance
         if self._active_features.get("sdxl_turbo_lora") and params.get("turbo", True):
             if untouched:
                 return settings.sdxl_turbo_guidance

@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   formatSize,
   formatVram,
+  imageFamilyDefaults,
   imageModelRank,
+  isKnownGuidanceDefault,
+  isKnownSizeDefault,
+  isKnownStepDefault,
   isLoraCompatible,
   isNunchaku,
   numberParam,
@@ -51,6 +55,8 @@ describe("model ranking & selection", () => {
     expect(imageModelRank(model({ family: "flux2", quant: "nunchaku-fp4" }))).toBe(-1);
     expect(imageModelRank(model({ family: "flux2" }))).toBe(0);
     expect(imageModelRank(model({ family: "flux", quant: "nunchaku-fp4" }))).toBe(0);
+    expect(imageModelRank(model({ family: "z-image" }))).toBe(0);
+    expect(imageModelRank(model({ family: "qwen-image" }))).toBe(1);
     expect(imageModelRank(model({ family: "sdxl" }))).toBe(1);
     expect(imageModelRank(model({ family: "sdxl", slow: true }))).toBe(2);
   });
@@ -70,6 +76,15 @@ describe("model ranking & selection", () => {
     expect(isLoraCompatible(sdxlLora, model({ family: "flux" }))).toBe(false);
     expect(isLoraCompatible(anyLora, model({ family: "flux" }))).toBe(true);
     expect(isLoraCompatible(sdxlLora, undefined)).toBe(true);
+  });
+
+  it("exposes family defaults for Qwen and Z-Image", () => {
+    expect(imageFamilyDefaults("qwen-image")).toMatchObject({ steps: 50, guidance: 4, width: 1328 });
+    expect(imageFamilyDefaults("z-image")).toMatchObject({ steps: 9, guidance: 0, width: 1024 });
+    expect(imageFamilyDefaults("sdxl")).toBeUndefined();
+    expect(isKnownStepDefault(9)).toBe(true);
+    expect(isKnownGuidanceDefault(0)).toBe(true);
+    expect(isKnownSizeDefault(1328)).toBe(true);
   });
 });
 

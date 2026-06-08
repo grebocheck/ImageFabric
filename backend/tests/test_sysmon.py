@@ -49,6 +49,11 @@ def test_sdxl_vram_is_clamped():
     assert tiny == 8.0   # lower clamp
 
 
+def test_qwen_and_z_image_vram_estimates_are_family_specific():
+    assert sysmon.estimate_vram_need_gb(ModelFamily.QWEN_IMAGE, 54 * 1_000_000_000, "bnb-nf4") == 15.0
+    assert sysmon.estimate_vram_need_gb(ModelFamily.Z_IMAGE, 31 * 1_000_000_000, None) == 15.0
+
+
 # ------------------------------------------------------ learned overrides
 
 

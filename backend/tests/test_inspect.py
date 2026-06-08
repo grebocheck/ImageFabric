@@ -11,7 +11,12 @@ import json
 from pathlib import Path
 import struct
 
-from app.backends.inspect import classify_image_model, classify_lora_model, is_flux2_dir
+from app.backends.inspect import (
+    classify_diffusers_dir,
+    classify_image_model,
+    classify_lora_model,
+    is_flux2_dir,
+)
 from app.core.enums import ModelFamily
 
 
@@ -82,3 +87,24 @@ def test_is_flux2_dir_false_without_index(tmp_path):
     d = tmp_path / "bare"
     d.mkdir()
     assert is_flux2_dir(d) is False
+
+
+def test_classify_diffusers_dir_detects_qwen_image(tmp_path):
+    d = tmp_path / "qwen-image-2512"
+    d.mkdir()
+    (d / "model_index.json").write_text(json.dumps({"_class_name": "QwenImagePipeline"}), encoding="utf-8")
+    assert classify_diffusers_dir(d) is ModelFamily.QWEN_IMAGE
+
+
+def test_classify_diffusers_dir_detects_z_image(tmp_path):
+    d = tmp_path / "z-image-turbo"
+    d.mkdir()
+    (d / "model_index.json").write_text(json.dumps({"_class_name": "ZImagePipeline"}), encoding="utf-8")
+    assert classify_diffusers_dir(d) is ModelFamily.Z_IMAGE
+
+
+def test_classify_diffusers_dir_ignores_unknown_pipeline(tmp_path):
+    d = tmp_path / "other"
+    d.mkdir()
+    (d / "model_index.json").write_text(json.dumps({"_class_name": "StableDiffusionXLPipeline"}), encoding="utf-8")
+    assert classify_diffusers_dir(d) is None

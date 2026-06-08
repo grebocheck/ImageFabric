@@ -1,6 +1,6 @@
 export type JobType = "llm" | "image";
 export type JobStatus = "queued" | "running" | "done" | "error" | "cancelled";
-export type ModelFamily = "flux" | "flux2" | "sdxl" | "gguf" | "unknown";
+export type ModelFamily = "flux" | "flux2" | "qwen-image" | "z-image" | "sdxl" | "gguf" | "unknown";
 export type AppTheme = "dark" | "dim" | "light";
 
 export interface Model {

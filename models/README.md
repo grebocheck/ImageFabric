@@ -10,7 +10,7 @@ license and provider terms. See [`../MODEL_NOTICE.md`](../MODEL_NOTICE.md).
 
 ```text
 models/
-|- image/   *.safetensors or model folders (FLUX, FLUX.2 klein, SDXL, ...)
+|- image/   *.safetensors or model folders (FLUX, FLUX.2, Qwen, Z-Image, SDXL)
 |- lora/    *.safetensors/.pt/.bin        (SDXL/FLUX LoRA adapters, SDXL turbo)
 |- llm/     *.gguf                        (llama.cpp GGUF models)
 |- tts/     *.gguf                        (llama-tts voice/acoustic models)
@@ -24,7 +24,7 @@ The backend scans these folders on startup:
 | Folder | Extensions / marker | Detected families |
 |--------|---------------------|-------------------|
 | `image/` | `.safetensors` | `flux`, `sdxl` |
-| `image/<repo>/` | `model_index.json` | `flux2` |
+| `image/<repo>/` | `model_index.json` | `flux2`, `qwen-image`, `z-image` |
 | `lora/` | `.safetensors`, `.pt`, `.bin` | `flux`, `sdxl`, or unknown |
 | `llm/` | `.gguf` | `gguf` (llama.cpp) |
 | `tts/` | `.gguf` | TTS models for `llama-tts` |
@@ -72,6 +72,21 @@ text encoder.
 On Blackwell GPUs, FLUX.2 nunchaku int4 is kept as a local file if downloaded
 but is hidden from the runtime model list because nunchaku requires fp4 for this
 GPU family.
+
+Qwen-Image-2512 and Z-Image-Turbo are also multi-file Diffusers repos. Put them
+under `models/image/` so HFabric can auto-detect their `model_index.json`:
+
+```powershell
+huggingface-cli download Qwen/Qwen-Image-2512 --local-dir models/image/qwen-image-2512
+huggingface-cli download Tongyi-MAI/Z-Image-Turbo --local-dir models/image/z-image-turbo --exclude "assets/*"
+```
+
+Or run `python scripts/fetch_qwen_z_image.py` from the repository root to fetch
+both public repos.
+
+Qwen-Image-2512 defaults to the backend's bitsandbytes 4-bit path
+(`HFAB_QWEN_IMAGE_QUANT=bnb-nf4`) because the bf16 repo is large. Z-Image-Turbo
+defaults to 1024x1024, 9 steps, and guidance 0.0.
 
 Environment variables like `HFAB_IMAGE_MODELS_DIR`, `HFAB_LORA_MODELS_DIR`,
 `HFAB_LLM_MODELS_DIR`, and `HFAB_TTS_MODELS_DIR` exist for development, but

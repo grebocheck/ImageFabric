@@ -175,7 +175,7 @@ huggingface-cli download nunchaku-tech/nunchaku-flux.1-dev svdq-fp4_r32-flux.1-d
 
 Models live in `models/` and are **not copied** into the venv or elsewhere. HFabric reads them in place.
 
-**Image models** (FLUX/SDXL — goes in `models/image/`):
+**Image models** (FLUX/SDXL/Qwen/Z-Image - goes in `models/image/`):
 
 ```bash
 # FLUX ComfyUI checkpoint (fp8, baseline reference)
@@ -183,6 +183,18 @@ huggingface-cli download black-forest-labs/FLUX.1-dev flux_dev.safetensors --loc
 
 # SDXL Lightning (faster SDXL)
 huggingface-cli download ByteDance/SDXL-Lightning sdxl_lightning_4step_lora.safetensors --local-dir models/lora
+
+# Qwen-Image-2512 (multi-file Diffusers repo)
+huggingface-cli download Qwen/Qwen-Image-2512 --local-dir models/image/qwen-image-2512
+
+# Z-Image-Turbo (multi-file Diffusers repo; assets are optional)
+huggingface-cli download Tongyi-MAI/Z-Image-Turbo --local-dir models/image/z-image-turbo --exclude "assets/*"
+```
+
+Or fetch both public Diffusers repos with:
+
+```bash
+python scripts/fetch_qwen_z_image.py
 ```
 
 **LLM models** (GGUF format — goes in `models/llm/`):
@@ -348,6 +360,9 @@ Env vars (prefix `HFAB_`, or a `.env` file in repo root). Highlights:
 | `HFAB_FLUX_STEP_CACHE` | `fb` | FLUX acceleration: `fb`, `teacache`, or `off`. |
 | `HFAB_ATTENTION_BACKEND` | `auto` | PyTorch SDPA selector: `auto`, `flash`, `efficient`, `math`, or `cudnn`. |
 | `HFAB_TORCH_COMPILE` | `false` | Compile FLUX transformer and run a warmup pass. |
+| `HFAB_QWEN_IMAGE_QUANT` | `bnb-nf4` | Qwen-Image-2512 repo quantization: `bnb-nf4`, `bnb-fp4`, or `none`. |
+| `HFAB_QWEN_IMAGE_OFFLOAD` | `model` | Qwen-Image placement when not using bnb quant: `model`, `sequential`, or `none`. |
+| `HFAB_Z_IMAGE_OFFLOAD` | `model` | Z-Image placement: `model`, `sequential`, or `none`. |
 | `HFAB_SDXL_TURBO_LORA` | unset | Optional SDXL DMD2/Lightning-style LoRA source. |
 | `HFAB_IMAGE_CLEANUP_AFTER_EACH_JOB` | `true` | Release per-image temporary allocations while keeping the resident model loaded. |
 | `HFAB_IMAGE_LORA_CACHE_MAX` | `2` | Max runtime LoRA adapters to keep in a resident image pipeline. |

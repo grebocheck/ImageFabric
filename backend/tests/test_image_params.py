@@ -43,6 +43,16 @@ def test_dimension_falls_back_to_flux2_default_when_unset():
     assert b._dimension({"width": 1024}, "width", settings.default_width, settings.flux2_default_width) == 1024
 
 
+def test_dimension_falls_back_to_qwen_and_z_image_defaults_when_unset():
+    qwen = _backend(ModelFamily.QWEN_IMAGE)
+    z_image = _backend(ModelFamily.Z_IMAGE)
+    assert qwen._dimension({}, "width", settings.default_width, settings.flux2_default_width) == settings.qwen_image_default_width
+    assert qwen._dimension({}, "height", settings.default_height, settings.flux2_default_height) == settings.qwen_image_default_height
+    assert z_image._dimension({}, "width", settings.default_width, settings.flux2_default_width) == settings.z_image_default_width
+    assert z_image._dimension({}, "height", settings.default_height, settings.flux2_default_height) == settings.z_image_default_height
+    assert z_image._dimension({"width": 768}, "width", settings.default_width, settings.flux2_default_width) == 768
+
+
 def test_steps_flux2_default_when_untouched():
     b = _backend(ModelFamily.FLUX2)
     assert b._steps({}) == settings.flux2_default_steps
@@ -56,7 +66,19 @@ def test_steps_sdxl_uses_global_default():
     assert b._steps({"steps": 15}) == 15
 
 
+def test_steps_qwen_and_z_image_defaults_when_untouched():
+    assert _backend(ModelFamily.QWEN_IMAGE)._steps({}) == settings.qwen_image_default_steps
+    assert _backend(ModelFamily.Z_IMAGE)._steps({}) == settings.z_image_default_steps
+    assert _backend(ModelFamily.Z_IMAGE)._steps({"steps": 12}) == 12
+
+
 def test_guidance_flux2_default_when_untouched():
     b = _backend(ModelFamily.FLUX2)
     assert b._guidance({}) == settings.flux2_default_guidance
     assert b._guidance({"guidance": 7.5}) == 7.5
+
+
+def test_guidance_qwen_and_z_image_defaults_when_untouched():
+    assert _backend(ModelFamily.QWEN_IMAGE)._guidance({}) == settings.qwen_image_default_guidance
+    assert _backend(ModelFamily.Z_IMAGE)._guidance({}) == settings.z_image_default_guidance
+    assert _backend(ModelFamily.Z_IMAGE)._guidance({"guidance": 1.5}) == 1.5
