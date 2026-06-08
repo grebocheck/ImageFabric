@@ -171,6 +171,28 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
   resident pipeline's weights (no extra resident model), validated on RTX 5070 Ti
   with a 512² / 2-step smoke. FLUX/FLUX.2 still fail fast with a clear SDXL-only
   message until their inpaint paths are wired and validated on hardware.
+- [x] **P13.6 — Selectable llama backend + context type (KV-cache quantization).**
+  The LLM panel gained a *Llama backend* dropdown and a *Context type* dropdown
+  next to *Context window*. Two builds are modelled (`LLAMA_BACKENDS` in
+  `config.py`): `default` (standard upstream llama.cpp) and `turbo` (a separate
+  TurboQuant-patched `llama-server`, path `HFAB_LLAMA_SERVER_BIN_TURBO`). Context
+  types (`CONTEXT_TYPES`): `f16` (default), `q8_0` (~2× smaller cache), `q4_0`
+  (~4×), and Google DeepMind's **TurboQuant** `turbo3` / `turbo4` — the last two
+  only offered when the `turbo` backend is selected. Each preset maps to
+  `--cache-type-k/-v` and forces `--flash-attn on` for quantized caches; the
+  active backend decides which `llama-server` binary launches. Changing either
+  relaunches `llama-server` via the existing ctx/ngl reload path
+  (`POST /api/llm/config { backend, context_type }`).
+  **No-surprise guarantees:** the API validates the `(backend, context_type)`
+  pair *before* committing (422 on an impossible explicit pairing; a backend
+  switch that orphans the current type gracefully resets it to `f16` with a note),
+  the backend preflights the pair + binary existence before spawning, and
+  `llama-server` stderr is drained into a 40-line ring buffer surfaced in startup
+  errors (so a bad launch reports *unknown cache type* instead of an opaque exit).
+  `q8_0`/`q4_0` work on any recent CUDA build; `turbo3`/`turbo4` need the patched
+  build at `HFAB_LLAMA_SERVER_BIN_TURBO`. Covered by 18 tests (arg-builder per
+  preset + per backend, stderr tail/bound, `/api/llm/config` get/set, invalid
+  pairings, graceful reset, 422s).
 
 ---
 

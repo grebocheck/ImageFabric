@@ -37,9 +37,9 @@ export const api = {
   getJob: (id: string) => fetch(`/api/jobs/${id}`).then(j<Job>),
   cancelJob: (id: string) => fetch(`/api/jobs/${id}`, { method: "DELETE" }).then(j<Job>),
   getLlmConfig: () => fetch("/api/llm/config").then(j<LlmConfig>),
-  setLlmConfig: (body: { ctx?: number; ngl?: number }) =>
+  setLlmConfig: (body: { ctx?: number; ngl?: number; backend?: string; context_type?: string }) =>
     fetch("/api/llm/config", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) })
-      .then(j<LlmConfig & { changed: boolean; reloaded: boolean }>),
+      .then(j<LlmConfig & { changed: boolean; reloaded: boolean; note: string | null }>),
   stopLlm: () => fetch("/api/llm/stop", { method: "POST" }).then(j<{ stopped: boolean }>),
 
   // --- chat conversations ---

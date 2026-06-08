@@ -12,11 +12,17 @@ the LLM->image phase pipeline works without a real model or binary.
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from typing import Any
 
 import httpx
 
-from ..config import settings
+from ..config import (
+    backend_supports_context_type,
+    resolve_context_type,
+    resolve_llama_backend,
+    settings,
+)
 from .base import LLMBackend, ModelDescriptor, TokenCb
 
 
@@ -25,6 +31,12 @@ class LlamaCppBackend(LLMBackend):
         super().__init__(descriptor)
         self._proc: asyncio.subprocess.Process | None = None
         self._stop = False
+        # Ring buffer of the server's last stderr lines, drained continuously so
+        # the pipe never blocks. Surfaced in startup errors — without it a bad
+        # launch knob (e.g. a turbo* cache type on a non-TurboQuant build) just
+        # looks like an opaque "exited during startup".
+        self._stderr_tail: deque[str] = deque(maxlen=40)
+        self._stderr_task: asyncio.Task | None = None
 
     def request_stop(self) -> None:
         """Best-effort interrupt of the in-flight streamed completion."""
@@ -45,18 +57,14 @@ class LlamaCppBackend(LLMBackend):
         await self._start_server()
         self._loaded = True
 
-    async def _start_server(self) -> None:
-        if not settings.llama_server_bin.exists():
-            raise FileNotFoundError(
-                f"llama-server binary not found at {settings.llama_server_bin}. "
-                "Place a CUDA(sm_120) build there or set HFAB_LLAMA_SERVER_BIN."
-            )
-        # Launch with cwd = the binary's folder so ggml's dynamic CUDA backend
-        # (ggml-cuda.dll, cudart, cublas — all shipped beside llama-server.exe) is
-        # found. Otherwise ggml silently falls back to CPU, which both eats ~12 GB
-        # of RAM and is far slower.
-        self._proc = await asyncio.create_subprocess_exec(
-            str(settings.llama_server_bin),
+    def _build_server_args(self) -> list[str]:
+        """Assemble the llama-server argv from the current launch knobs.
+
+        Split out from ``_start_server`` so the cache-type / flash-attn wiring is
+        unit-testable without actually spawning a process.
+        """
+        args = [
+            str(settings.active_llama_bin),
             "-m", str(self.descriptor.path),
             "--host", settings.llama_host,
             "--port", str(settings.llama_port),
@@ -68,18 +76,79 @@ class LlamaCppBackend(LLMBackend):
             # has touched CUDA) -> without this the LLM silently runs on CPU,
             # eating ~12 GB RAM and crawling.
             "--fit", "off",
-            cwd=str(settings.llama_server_bin.parent),
+        ]
+        # KV-cache ("context") quantization. f16 is the implicit server default,
+        # so only pass the flags when a non-f16 preset is chosen. A quantized V
+        # cache requires flash-attention, so force it on for those presets.
+        ct = resolve_context_type(settings.llama_context_type)
+        if ct["k"] != "f16" or ct["v"] != "f16":
+            args += ["--cache-type-k", ct["k"], "--cache-type-v", ct["v"]]
+        if ct["flash_attn"]:
+            args += ["--flash-attn", "on"]
+        return args
+
+    async def _start_server(self) -> None:
+        backend = resolve_llama_backend(settings.llama_backend)
+        # Preflight the (backend, context_type) pair so a misconfiguration fails
+        # with a clear message here instead of the server aborting at launch.
+        if not backend_supports_context_type(settings.llama_backend, settings.llama_context_type):
+            raise RuntimeError(
+                f"context type '{settings.llama_context_type}' is not supported by the "
+                f"'{settings.llama_backend}' llama backend ({backend['label']}). "
+                f"Supported here: {', '.join(backend['context_types'])}."
+            )
+        bin_path = settings.active_llama_bin
+        if not bin_path.exists():
+            env = "HFAB_LLAMA_SERVER_BIN_TURBO" if settings.llama_backend == "turbo" else "HFAB_LLAMA_SERVER_BIN"
+            raise FileNotFoundError(
+                f"llama-server binary for the '{settings.llama_backend}' backend "
+                f"({backend['label']}) not found at {bin_path}. "
+                f"Place a CUDA(sm_120) build there or set {env}."
+            )
+        # Launch with cwd = the binary's folder so ggml's dynamic CUDA backend
+        # (ggml-cuda.dll, cudart, cublas — all shipped beside llama-server.exe) is
+        # found. Otherwise ggml silently falls back to CPU, which both eats ~12 GB
+        # of RAM and is far slower.
+        self._stderr_tail.clear()
+        self._proc = await asyncio.create_subprocess_exec(
+            *self._build_server_args(),
+            cwd=str(bin_path.parent),
             stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
         )
+        self._stderr_task = asyncio.create_task(self._drain_stderr())
         await self._wait_healthy()
+
+    async def _drain_stderr(self) -> None:
+        """Continuously copy the server's stderr into the ring buffer so the pipe
+        never fills (which would stall the subprocess) and the tail is available
+        for diagnostics."""
+        proc = self._proc
+        if proc is None or proc.stderr is None:
+            return
+        async for raw in proc.stderr:
+            self._stderr_tail.append(raw.decode("utf-8", "replace").rstrip())
+
+    def _stderr_detail(self) -> str:
+        tail = "\n".join(self._stderr_tail).strip()
+        return f"\n--- llama-server stderr (tail) ---\n{tail}" if tail else ""
 
     async def _wait_healthy(self, timeout: float = 120.0) -> None:
         deadline = asyncio.get_running_loop().time() + timeout
         async with httpx.AsyncClient() as client:
             while asyncio.get_running_loop().time() < deadline:
                 if self._proc and self._proc.returncode is not None:
-                    raise RuntimeError("llama-server exited during startup")
+                    # Let the drain task flush whatever the server printed before
+                    # it died (e.g. an unknown cache type) into the tail.
+                    if self._stderr_task is not None:
+                        try:
+                            await asyncio.wait_for(self._stderr_task, timeout=1.0)
+                        except (TimeoutError, asyncio.CancelledError):
+                            pass
+                    raise RuntimeError(
+                        f"llama-server exited during startup (code "
+                        f"{self._proc.returncode}).{self._stderr_detail()}"
+                    )
                 try:
                     r = await client.get(f"{self._base_url}/health", timeout=2.0)
                     if r.status_code == 200:
@@ -87,7 +156,9 @@ class LlamaCppBackend(LLMBackend):
                 except httpx.HTTPError:
                     pass
                 await asyncio.sleep(0.5)
-        raise TimeoutError("llama-server did not become healthy in time")
+        raise TimeoutError(
+            f"llama-server did not become healthy in time.{self._stderr_detail()}"
+        )
 
     # --------------------------------------------------------------- unload
     async def unload(self) -> None:
@@ -100,6 +171,9 @@ class LlamaCppBackend(LLMBackend):
             except TimeoutError:
                 self._proc.kill()
                 await self._proc.wait()
+        if self._stderr_task is not None:
+            self._stderr_task.cancel()
+            self._stderr_task = None
         self._proc = None
         self._loaded = False
 

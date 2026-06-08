@@ -243,9 +243,28 @@ export interface ChatSendBody {
   rag_top_k?: number;
 }
 
+export interface LlmContextType {
+  id: string;
+  label: string;
+  experimental: boolean;
+}
+
+export interface LlmBackendInfo {
+  id: string;
+  label: string;
+  available: boolean;
+  path: string;
+  context_types: string[];
+}
+
 export interface LlmConfig {
   ctx: number;
   ngl: number;
+  backend: string;
+  backends: LlmBackendInfo[];
+  context_type: string;
+  context_types: LlmContextType[];
+  stub: boolean;
   loaded: boolean;
   model_id: string | null;
   defaults: { temperature: number; max_tokens: number };

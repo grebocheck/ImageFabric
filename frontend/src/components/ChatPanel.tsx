@@ -72,6 +72,7 @@ export function ChatPanel({ models, modelsLoading = false, jump }: { models: Mod
 
   const [cfg, setCfg] = useState<LlmConfig | null>(null);
   const [ctxDraft, setCtxDraft] = useState<number | null>(null);
+  const [ctxTypeBusy, setCtxTypeBusy] = useState(false);
   const [cfgNote, setCfgNote] = useState("");
   const [importNote, setImportNote] = useState("");
 
@@ -404,6 +405,28 @@ export function ChatPanel({ models, modelsLoading = false, jump }: { models: Mod
       setCfgNote(err instanceof Error ? err.message : "could not update");
     }
   };
+
+  const applyLlmConfig = async (body: { backend?: string; context_type?: string }) => {
+    setCfgNote(""); setCtxTypeBusy(true);
+    try {
+      const next = await api.setLlmConfig(body);
+      setCfg(next);
+      const base = next.reloaded ? "applied — model reloaded" : next.changed ? "applied (next load)" : "no change";
+      setCfgNote(next.note ? `${base} · ${next.note}` : base);
+    } catch (err) {
+      setCfgNote(err instanceof Error ? err.message : "could not update");
+    } finally {
+      setCtxTypeBusy(false);
+    }
+  };
+  const applyBackend = (backend: string) => void applyLlmConfig({ backend });
+  const applyContextType = (context_type: string) => void applyLlmConfig({ context_type });
+  const activeBackend = cfg?.backends.find((b) => b.id === cfg.backend) ?? null;
+  // Only offer context types the active backend can actually run (e.g. turbo3/4
+  // disappear unless the TurboQuant backend is selected).
+  const ctxTypeOptions = (cfg?.context_types ?? []).filter(
+    (ct) => !activeBackend || activeBackend.context_types.includes(ct.id),
+  );
 
   // --- personas ---
   const applyPersona = (id: string) => {
@@ -787,6 +810,50 @@ export function ChatPanel({ models, modelsLoading = false, jump }: { models: Mod
           <div className="mt-1 text-[11px] text-white/35">current {cfg?.ctx ?? "?"} · {cfg?.loaded ? "loaded" : "not loaded"}</div>
           {cfgNote && <div className="mt-1 text-[11px] text-emerald-300/80">{cfgNote}</div>}
           {ctxDraft != null && cfg && ctxDraft !== cfg.ctx && cfg.loaded && (
+            <div className="mt-1 text-[11px] text-amber-300/80">applying reloads the running model</div>
+          )}
+        </div>
+
+        <div>
+          <div className={label}>Llama backend</div>
+          <select
+            value={cfg?.backend ?? "default"}
+            disabled={!cfg || ctxTypeBusy}
+            onChange={(e) => applyBackend(e.target.value)}
+            className={`${numField} mt-1 disabled:opacity-40`}
+          >
+            {(cfg?.backends ?? []).map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.label}{!b.available && !cfg?.stub ? " (binary not found)" : ""}
+              </option>
+            ))}
+          </select>
+          {activeBackend && !activeBackend.available && !cfg?.stub && (
+            <div className="mt-1 text-[11px] text-amber-300/80">
+              binary not found at <span className="font-mono">{activeBackend.path}</span> — the LLM won't start with this backend
+            </div>
+          )}
+        </div>
+
+        <div>
+          <div className={label}>Context type (KV cache)</div>
+          <select
+            value={cfg?.context_type ?? "f16"}
+            disabled={!cfg || ctxTypeBusy}
+            onChange={(e) => applyContextType(e.target.value)}
+            className={`${numField} mt-1 disabled:opacity-40`}
+          >
+            {ctxTypeOptions.map((ct) => (
+              <option key={ct.id} value={ct.id}>
+                {ct.label}
+              </option>
+            ))}
+          </select>
+          <div className="mt-1 text-[11px] text-white/35">quantizes the context to fit a longer window in the same VRAM</div>
+          {cfg?.context_types.find((ct) => ct.id === cfg.context_type)?.experimental && (
+            <div className="mt-1 text-[11px] text-amber-300/80">TurboQuant types require the TurboQuant backend's patched llama.cpp build</div>
+          )}
+          {cfg && cfg.context_type !== "f16" && cfg.loaded && (
             <div className="mt-1 text-[11px] text-amber-300/80">applying reloads the running model</div>
           )}
         </div>

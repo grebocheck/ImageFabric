@@ -22,6 +22,59 @@ ROOT = Path(__file__).resolve().parents[2]
 # Linux/macOS. Default to the right one for the host (overridable via HFAB_*).
 _EXE = ".exe" if sys.platform == "win32" else ""
 
+# KV-cache ("context") quantization presets. Each maps to llama.cpp's
+# --cache-type-k / --cache-type-v plus whether flash-attention must be forced on
+# (llama.cpp requires FA for a *quantized* V cache, otherwise the server aborts).
+# `turbo3` / `turbo4` are Google DeepMind's TurboQuant types: they only exist in
+# a TurboQuant-patched llama.cpp build, NOT in upstream, so they are flagged
+# experimental and the UI warns about the required binary.
+CONTEXT_TYPES: dict[str, dict] = {
+    "f16":    {"label": "F16 (default, full precision)", "k": "f16",    "v": "f16",    "flash_attn": False, "experimental": False},
+    "q8_0":   {"label": "Q8_0 (~2x smaller cache)",      "k": "q8_0",   "v": "q8_0",   "flash_attn": True,  "experimental": False},
+    "q4_0":   {"label": "Q4_0 (~4x smaller cache)",      "k": "q4_0",   "v": "q4_0",   "flash_attn": True,  "experimental": False},
+    "turbo2": {"label": "TurboQuant turbo2 (experimental)", "k": "turbo2", "v": "turbo2", "flash_attn": True,  "experimental": True},
+    "turbo3": {"label": "TurboQuant turbo3 (experimental)", "k": "turbo3", "v": "turbo3", "flash_attn": True,  "experimental": True},
+    "turbo4": {"label": "TurboQuant turbo4 (experimental)", "k": "turbo4", "v": "turbo4", "flash_attn": True,  "experimental": True},
+}
+DEFAULT_CONTEXT_TYPE = "f16"
+
+
+def resolve_context_type(name: str | None) -> dict:
+    """Look up a context-type preset, falling back to the f16 default."""
+    return CONTEXT_TYPES.get(name or "", CONTEXT_TYPES[DEFAULT_CONTEXT_TYPE])
+
+
+# Selectable llama.cpp builds ("backends"). Upstream llama.cpp and a
+# TurboQuant-patched build are *different binaries* with different capabilities:
+# only the patched one understands the turbo3 / turbo4 cache types. Modelling
+# them explicitly lets the UI offer the matching context types and lets us reject
+# an impossible (backend, context_type) pair *before* launching the server,
+# instead of the server aborting with an opaque error. `bin_attr` names the
+# Settings field that holds that build's `llama-server` path.
+LLAMA_BACKENDS: dict[str, dict] = {
+    "default": {
+        "label": "Standard llama.cpp",
+        "bin_attr": "llama_server_bin",
+        "context_types": ("f16", "q8_0", "q4_0"),
+    },
+    "turbo": {
+        "label": "TurboQuant build",
+        "bin_attr": "llama_server_bin_turbo",
+        "context_types": ("f16", "q8_0", "q4_0", "turbo2", "turbo3", "turbo4"),
+    },
+}
+DEFAULT_LLAMA_BACKEND = "default"
+
+
+def resolve_llama_backend(name: str | None) -> dict:
+    """Look up a llama-backend spec, falling back to the standard build."""
+    return LLAMA_BACKENDS.get(name or "", LLAMA_BACKENDS[DEFAULT_LLAMA_BACKEND])
+
+
+def backend_supports_context_type(backend: str | None, context_type: str | None) -> bool:
+    """Whether the given llama backend can run the given context (cache) type."""
+    return (context_type or DEFAULT_CONTEXT_TYPE) in resolve_llama_backend(backend)["context_types"]
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -62,6 +115,10 @@ class Settings(BaseSettings):
     # --- llama.cpp ---
     # Path to a CUDA(sm_120) `llama-server` binary. Used in real (non-stub) mode.
     llama_server_bin: Path = ROOT / "bin" / "llama" / f"llama-server{_EXE}"
+    # Optional separate TurboQuant-patched `llama-server` build (supports the
+    # turbo3 / turbo4 cache types). Kept in its own folder so it can coexist with
+    # the standard build; selected via `llama_backend` = "turbo".
+    llama_server_bin_turbo: Path = ROOT / "bin" / "llama-turbo" / f"llama-server{_EXE}"
     llama_tts_bin: Path = ROOT / "bin" / "llama" / f"llama-tts{_EXE}"
     llama_mtmd_bin: Path = ROOT / "bin" / "llama" / f"llama-mtmd-cli{_EXE}"
     llama_host: str = "127.0.0.1"
@@ -70,6 +127,13 @@ class Settings(BaseSettings):
     # Default launch knobs (tunable per-model later). 999 = offload all layers.
     llama_ngl: int = 999
     llama_ctx: int = 8192
+    # Active llama.cpp build (see LLAMA_BACKENDS). "default" = standard upstream;
+    # "turbo" = TurboQuant-patched build that also offers turbo3 / turbo4.
+    llama_backend: str = DEFAULT_LLAMA_BACKEND
+    # KV-cache quantization preset (see CONTEXT_TYPES). "f16" keeps the cache at
+    # full precision; quantized / TurboQuant types shrink it so a longer context
+    # fits the same VRAM. Changing it relaunches llama-server (new launch knob).
+    llama_context_type: str = DEFAULT_CONTEXT_TYPE
     # TTS runs through a separate llama.cpp CLI for now. Keep it CPU-only by
     # default so it cannot bypass the shared GPU arbiter.
     tts_gpu_layers: int = 0
@@ -203,6 +267,11 @@ class Settings(BaseSettings):
     @property
     def db_url(self) -> str:
         return f"sqlite+aiosqlite:///{self.db_path.as_posix()}"
+
+    @property
+    def active_llama_bin(self) -> Path:
+        """The `llama-server` path for the currently selected llama backend."""
+        return getattr(self, resolve_llama_backend(self.llama_backend)["bin_attr"])
 
     def ensure_dirs(self) -> None:
         for d in (
