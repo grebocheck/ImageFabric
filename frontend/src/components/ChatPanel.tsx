@@ -31,7 +31,7 @@ type Stats = { tokens: number; tps: number; ttft: number };
 
 export type ChatJump = { conversationId: string; jobId?: string; nonce: number };
 
-export function ChatPanel({ models, modelsLoading = false, jump }: { models: Model[]; modelsLoading?: boolean; jump?: ChatJump | null }) {
+export function ChatPanel({ models, modelsLoading = false, jump, draft, setDraft }: { models: Model[]; modelsLoading?: boolean; jump?: ChatJump | null; draft: string; setDraft: (v: string) => void }) {
   const llmModels = models.filter((m) => m.job_type === "llm");
   const saved = loadDefaults();
 
@@ -40,7 +40,10 @@ export function ChatPanel({ models, modelsLoading = false, jump }: { models: Mod
   const [activeId, setActiveId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
-  const [input, setInput] = useState("");
+  // The composer draft is lifted to App so it survives tab switches (this panel
+  // unmounts when you navigate away).
+  const input = draft;
+  const setInput = setDraft;
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
   const [stats, setStats] = useState<Stats | null>(null);

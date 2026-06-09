@@ -64,6 +64,9 @@ export default function App() {
   const [chatJump, setChatJump] = useState<ChatJump | null>(null);
 
   const [promptDraft, setPromptDraft] = useState("");
+  // LLM composer draft, lifted so it survives tab switches (ChatPanel unmounts
+  // when you leave the LLM tab).
+  const [chatDraft, setChatDraft] = useState("");
   // History self-fetches; bump this to make it reload after a new image lands.
   const [imageEpoch, setImageEpoch] = useState(0);
   // A "reproduce from History" request handed to the image composer.
@@ -284,7 +287,7 @@ export default function App() {
       label: "LLM",
       render: () => (
         <main className="flex-1 overflow-hidden p-4">
-          <ChatPanel models={models} modelsLoading={modelsLoading} jump={chatJump} />
+          <ChatPanel models={models} modelsLoading={modelsLoading} jump={chatJump} draft={chatDraft} setDraft={setChatDraft} />
         </main>
       ),
     },
