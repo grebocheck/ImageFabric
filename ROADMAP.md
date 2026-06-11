@@ -1,10 +1,12 @@
 # HFabric — Roadmap & Prioritized Backlog
 
-> Status: **working app, real-GPU validated (M0/M1).** The arbiter, image + chat
-> workspaces, history/browse, and the superapp shell are shipped and in real use.
-> What's left is genuinely *in-flight or unbuilt*: the **real-time voice changer**
-> (the one phase still in progress), an **engineering safety net** (there are no
-> automated tests yet), and the **loose ends** trailing the shipped phases.
+> Status: **working app, real-GPU validated (M0/M1), test/CI safety net in place
+> (143 tests green).** Rebuilt 2026-06-11 from the findings of the
+> [project audit](docs/audit-2026-06.md) (overall grade **B / 7.5**). The backlog
+> below is ordered by risk: lock the front door (P14), validate the one unproven
+> phase (P6), then harden data/tests, then pay down code health, then grow.
+>
+> Marking: `[ ]` not started · `[~]` in progress / partially done · `[x]` done.
 
 ## Objectives (in priority order)
 
@@ -16,6 +18,9 @@
    with a safety margin, so we never overflow into shared/system VRAM (that path
    is the 23-min FLUX disaster from M0).
 3. **Speed on Blackwell** — fp4/fp8 compute, `torch.compile`, step-caching.
+4. **Trustworthy by default** *(new, from the audit)* — the API must be safe to
+   leave running: not reachable by strangers, debuggable after a crash, and
+   restorable after a disk failure.
 
 ## Memory invariants (do not break these)
 
@@ -36,163 +41,219 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
 
 ## Active backlog
 
-### P6 — Real-time voice changer (in progress — the only live build)
+### P14 — Security & network exposure (NEW — do first; audit W1)
 
-> Real-time voice conversion (mic → target voice → output). We **wrap w-okada /
-> MMVCServerSIO** (it owns the realtime duplex audio loop, device I/O, and
-> virtual-cable output) and build a cleaner control surface. Local install:
-> `D:\MMVCServerSIO` (override `HFAB_VOICE_WOKADA_DIR`); models in `<dir>\model_dir`
-> as numbered slots. A live session **pins the GPU**, so it gets a **voice lane**
-> coordinated with the arbiter (refuse/park heavy jobs while live), checked against
-> the same `sysmon` budget.
->
-> All four sub-items are wired but **none is validated against a real audio
-> stream** — that end-to-end validation is the gating work for this phase.
+> The API has **no authentication** and the local `.env` binds it to
+> `0.0.0.0:80`. Any LAN device can delete images, relaunch llama-server, start
+> the voice subprocess, and pop the desktop file manager via
+> `POST /api/images/{id}/reveal`. CORS only restricts *browsers* — it is not an
+> auth layer. Until this phase lands, treat LAN exposure as unsafe.
 
-- [~] **P6.1 — Voice detection shell.** Voice tab + `/api/voice/status` detect the
-  install, read `model_dir` slots, probe the server. `/api/voice/convert` is wired
-  but gated (503). *Remaining:* launch/manage the server + drive its conversion API.
-- [~] **P6.2 — Drive the w-okada server.** Launch/stop `MMVCServerSIO.exe` as a
-  managed subprocess; proxy `GET /info`, `GET /performance`, `POST /update_settings`;
-  select a slot, set live params, start/stop the server-audio stream; park queued
-  GPU jobs while live. *Remaining:* latency measurement + richer performance display.
-- [~] **P6.3 — Output routing.** Input/output/monitor device pickers, sample-rate,
-  chunk-size, gain from `/info`. See [voice-routing.md](docs/voice-routing.md).
-  *Remaining:* validate selectors against a live session + friendlier handling of
-  unsupported sample-rate combos.
-- [~] **P6.4 — The UI (the differentiator).** Live `/performance` metrics, VU bars,
-  rolling waveform, timing-stage breakdown, pitch/formant/index/protect controls,
-  latency/quality presets, bypass/PTT via `passThrough`. *Remaining:* validate
+- [ ] **P14.1 — Decide and enforce the bind posture.** Revert the local `.env` to
+  the code default (`127.0.0.1:8260`) *or* make LAN exposure deliberate: keep
+  `HFAB_HOST=0.0.0.0` only together with P14.2 auth. Add a loud startup warning
+  (log + `/api/health` field + UI toast) whenever the server is bound to a
+  non-loopback address without a token configured. Document the threat model in
+  README ("local single-user app; LAN exposure requires HFAB_API_TOKEN").
+- [ ] **P14.2 — Optional bearer-token auth.** New `HFAB_API_TOKEN` setting; when
+  set, a middleware rejects any request without `Authorization: Bearer <token>`
+  (and the WebSocket without a `?token=` query param). The frontend reads the
+  token from a small login prompt persisted in `localStorage` and attaches it in
+  `api/client.ts` + `useEvents.ts`. Empty/unset token = current open behavior on
+  loopback. Tests: 401 paths, WS rejection, health stays open (or not — decide).
+- [ ] **P14.3 — Gate desktop-reaching endpoints to loopback.** `reveal_image`
+  (spawns `explorer`/`open`/`xdg-open`) must refuse requests whose client address
+  is not `127.0.0.1/::1`, regardless of token — a remote caller has no business
+  driving the local desktop. Audit for other desktop/process endpoints as they
+  appear (voice launch falls under the token, not loopback, since the UI may be
+  remote-legit later).
+- [ ] **P14.4 — Upload/content hardening sweep.** Verify every upload path
+  enforces its size cap *before* reading the body where possible
+  (`image_upload_max_mb`, `transcription_max_upload_mb`, `vision_max_upload_mb`,
+  `voice_max_upload_mb`); confirm Pillow re-encodes (not just opens) uploaded
+  images so crafted files never land raw in `outputs/uploads`; add a test per
+  cap. One pass, mostly verification — the token guard in `util/uploads.py` is
+  already right.
+
+### P6 — Real-time voice changer (carried — the one unproven phase; audit W2)
+
+> Real-time voice conversion (mic → target voice → output) wrapping w-okada /
+> MMVCServerSIO (local install `D:\MMVCServerSIO`, override
+> `HFAB_VOICE_WOKADA_DIR`). A live session pins the GPU via a **voice lane**
+> coordinated with the arbiter. All four sub-items are wired but **none is
+> validated against a real audio stream** — that end-to-end validation is the
+> gating work, and ~530 lines of `api/voice.py` are effectively unverified until
+> it happens.
+
+- [~] **P6.1 — Voice detection shell.** Detection, `model_dir` slots, server
+  probe shipped. *Remaining:* none beyond the live validation in P6.5.
+- [~] **P6.2 — Drive the w-okada server.** Launch/stop as managed subprocess,
+  settings proxy, slot select, queue parking shipped. *Remaining:* latency
+  measurement + richer performance display.
+- [~] **P6.3 — Output routing.** Device pickers, sample-rate, chunk, gain
+  shipped (see [voice-routing.md](docs/voice-routing.md)). *Remaining:* validate
+  selectors live + friendlier handling of unsupported sample-rate combos.
+- [~] **P6.4 — The UI (the differentiator).** Live metrics, VU bars, waveform,
+  pitch/formant controls, presets, PTT shipped. *Remaining:* validate
   meters/timings against a real stream; tune stage labels.
+- [ ] **P6.5 — End-to-end live validation (gates the phase).** With a real mic +
+  virtual cable: start a session, confirm conversion + monitor output, measure
+  round-trip latency at 2–3 chunk sizes, confirm the voice lane actually parks a
+  queued image job and resumes it after stop, confirm llama/image jobs cannot
+  steal the GPU mid-session, and write the measured numbers into this file.
+  Fix what breaks; only then mark P6.1–P6.4 done.
 
-### P10 — Test & CI safety net (new — engineering foundation)
+### P15 — Reliability & data layer (NEW — audit W3, W7)
 
-> The memory invariants above *are* the product, and there is currently **no
-> regression net**: zero automated tests, no CI, no committed lint/format config.
-> The `scripts/*` runners are manual checks against a live GPU backend, not unit
-> tests. Crucially, the whole pipeline already runs in **STUB mode with no GPU**,
-> so most of this is cheap to build and CI-friendly.
+> The schema is migrated by a hand-rolled `ALTER TABLE` helper, nothing is
+> logged to disk, and there is no backup story. Each is cheap now and expensive
+> after the tenth table / first lost database.
 
-- [x] **P10.1 — Unit tests for the pure logic.** No torch, no GPU
-  (`backend/tests/`): `scheduler.select_in_tier`/`plan_queue` (phase-batching
-  order + swap count) and `Worker._strip_reasoning` in `test_scheduler.py`;
-  `sysmon` budget math (predicted-vs-available; learned-vs-static, headroom,
-  keep-warm) in `test_sysmon.py`; `model_profile_service` conservative running-max
-  in `test_model_profile.py`. 31 cases.
-- [x] **P10.2 — STUB-mode integration test.** `test_stub_integration.py` drives
-  the real app over an httpx ASGI client with the lifespan running: posts a mixed
-  batch and asserts via the event bus that each family loads once and there is
-  exactly **one** swap, then that both images land in the gallery — the hermetic
-  `phase_batch_check.py`. Hermetic temp DB + dummy model files (conftest).
-- [x] **P10.3 — Frontend unit tests.** Vitest + Testing Library (`npm test`):
-  `Thinking.test.ts` (reasoning split states) and `Select.test.tsx` (open / filter
-  / choose / no-options). 11 cases. *Remaining:* composer-state (de)serialization.
-- [x] **P10.4 — CI workflow.** `.github/workflows/ci.yml` runs on push/PR:
-  backend `ruff check` + `pytest` (stub), frontend `tsc -b` + `vitest`.
+- [ ] **P15.1 — Real migrations.** Introduce Alembic (async SQLite) with the
+  current schema as revision 0; fold the `_ensure_image_columns` logic into a
+  proper revision and delete it. `init_db()` runs `upgrade head` at startup.
+  Document "how to add a column" in the README dev section. Test: fresh DB and
+  a pre-migration DB both come up.
+- [ ] **P15.2 — Structured file logging.** Rotating file handler under
+  `data/logs/` (size-capped, ~5×10 MB): startup config summary, every arbiter
+  note (swap / refusal / warm-evict with the numbers), job start/done/error with
+  duration, llama-server stderr tail on failure, unhandled exceptions. Plain
+  `logging` is fine; the point is post-mortem debuggability (the "it hung
+  overnight" case), not an ELK stack.
+- [ ] **P15.3 — Backup & restore story.** A `scripts/backup.py` (or `.ps1`) that
+  snapshots `data/hfabric.db` (using the SQLite backup API, not file-copy of a
+  live WAL DB) plus a manifest of `outputs/`; README section on what to back up
+  and how to restore. Optional: a retention-N rotation.
+- [ ] **P15.4 — Orphan-process audit.** If the backend dies hard, can
+  `llama-server` / `MMVCServerSIO` outlive it and hold VRAM? Track child PIDs in
+  a pidfile and reap stale ones on startup (with a log line), mirroring the
+  existing orphan-job requeue. Test with a simulated kill in stub mode where
+  possible.
 
-### P11 — Code health & docs (new)
+### P16 — Test depth & quality gates (NEW — audit W4; absorbs P11.2 tail)
 
-> Tidy debt that's accumulating quietly while features land.
+> The core (scheduler/sysmon/arbiter/gallery) is well covered; the edges —
+> chat, rag, tts, transcription, vision, voice, notes, presets, code routers and
+> chat/embedding services — have **zero** tests, and CI measures nothing, so
+> holes stay invisible.
 
-- [~] **P11.1 — Decompose the oversized screens.** *Started:* the pure,
-  view-agnostic logic is extracted into tested helper modules with **no behavior
-  change** — `chatHelpers.ts` (import-bundle parsing, sampling coercion, model
-  labelling; 152 lines) out of `ChatPanel.tsx` (1125 → 1003) and
-  `imageComposerHelpers.ts` (persisted composer state, model ranking, LoRA
-  compatibility, formatters; 99 lines) out of `ImageComposer.tsx` (698 → 631),
-  each with a vitest suite. *Remaining:* the harder sub-component / hook splits of
-  the same two files, `VoicePanel.tsx` (~749), and `backends/image_diffusers.py`
-  (~1004, GPU — needs real-hardware verification, not just typecheck).
-- [x] **P11.2 — Commit lint/format config.** `backend/pyproject.toml` now holds a
-  ruff config (E/F/I/B/C4/UP, with the manual-judgment rules deferred and
-  documented) and the pytest config; 75 mechanical issues auto-fixed across the
-  backend so the tree is green and CI-enforceable. Frontend gets `vitest` wired in
-  `vite.config.ts` + `package.json`. *Remaining:* frontend eslint/prettier.
-- [x] **P11.3 — Sync the docs with reality.** `README.md` "Status" now reflects the
-  real-GPU-validated M0/M1 state and the actual STUB/REAL default story; the stale
-  "Next: milestone M0" section is replaced by a **Testing** section pointing at the
-  new suites + CI. *Remaining:* generating the giant knob table from `/api/settings`
-  instead of hand-maintaining it.
+- [ ] **P16.1 — Coverage measurement in CI.** Add `pytest-cov` to the backend CI
+  job, publish the report in the run summary, and set a floor that today's suite
+  already passes (start ~55–60% on `app/`, excluding `backends/image_diffusers.py`
+  and other GPU-only modules via `.coveragerc`). Ratchet the floor up as P16.2
+  lands — never down.
+- [ ] **P16.2 — Router tests for the untested half.** Stub-mode httpx tests per
+  router, reusing the `test_stub_integration.py` conftest: chat (conversation
+  CRUD, message flow, `/image` bridge, regenerate/edit), rag (ingest → search →
+  cited answer path with a fake embed server), notes/presets/code (CRUD +
+  validation), tts/transcription/vision (request validation + the
+  no-model/no-binary error paths — the subprocess itself can be monkeypatched),
+  voice (status/config endpoints with a fake install dir). Target: every router
+  file imported by `main.py` has a test file.
+- [ ] **P16.3 — Frontend lint in CI (P11.2 tail).** eslint (typescript-eslint +
+  react-hooks) + prettier, config committed, `npm run lint` wired into
+  `.github/workflows/ci.yml`. Auto-fix the initial sweep in its own commit so
+  review stays readable.
+- [ ] **P16.4 — Frontend flow tests.** Testing-Library tests for the three
+  highest-value flows: ChatPanel (send → streamed reply → thinking panel split),
+  Gallery (filter chips combine + bulk select), QueuePanel (job states + cancel).
+  Mock `api/client.ts` + the WS hook; no real backend.
+- [ ] **P16.5 — Real-GPU smoke checklist.** One doc (`docs/gpu-smoke.md`)
+  consolidating the manual runners (`scripts/swap_leak_test.py`,
+  `phase_batch_check.py`, `sdxl_resident_drift_test.py`, `image_live_bench.py`,
+  `kv_cache_*.py`) into a 15-minute ordered checklist with expected numbers from
+  M1, to run after any torch/diffusers/driver bump. The scripts exist — the
+  missing artifact is the checklist with pass criteria.
 
-### P12 — Generation-page & arbiter loose ends (new — gathers shipped-phase tails)
+### P17 — Code health round 2 (carries P11.1; audit W5, W6, W9)
 
-> The shipped P7/P8/P9 phases each left a small, named remainder. Collected here so
-> they don't get lost in the "Shipped" log.
+> Helper extraction (P11.1 first half) proved the pattern: pure logic out, tests
+> on, no behavior change. Now the hard splits — plus the reproducibility and
+> hygiene items that protect the verified GPU environment.
 
-- [ ] **P12.1 — Learned-profile management.** A UI list of learned `model_profiles`
-  with a reset control (P7.2 tail), plus capture LLM-subprocess VRAM (its
-  `load_report` is currently `None`, so the LLM is the one model with no measured
-  figure).
-- [ ] **P12.2 — Per-job arbiter attribution.** Surface the blocking/swap reason on
-  the *exact* queued card (not just the Queue header) and add a keep-warm-eviction
-  reason (P7.1 tail).
+- [ ] **P17.1 — Split `ChatPanel.tsx` (1070).** Extract `useConversation` (load /
+  send / stream / regenerate state machine) and `useChatStream` (WS token
+  assembly) hooks plus `MessageList` / `MessageComposer` subcomponents. Behavior
+  frozen by P16.4's flow test written *first*.
+- [ ] **P17.2 — Split `backends/image_diffusers.py` (1435, GPU).** One module per
+  family loader (`sdxl.py`, `flux.py`, `flux2.py`, `qwen_z.py`) + shared
+  infrastructure (`memory.py`: cleanup/recycle/LoRA cache; `pipelines.py`:
+  img2img/inpaint views). Pure import-shuffle commits, each followed by a
+  real-hardware smoke (P16.5 checklist) — typecheck alone does not validate this
+  file.
+- [ ] **P17.3 — Split the remaining big screens.** `VoicePanel.tsx` (749 — after
+  P6.5 so validation isn't chasing a moving target), `ImageComposer.tsx` (697 —
+  extract the mask/source-image block and the param form), `Gallery.tsx` (632 —
+  extract filter bar + detail modal).
+- [ ] **P17.4 — Generate API types from OpenAPI.** Replace the hand-maintained
+  halves of `types.ts` (515 lines) with `openapi-typescript` output generated
+  from the FastAPI schema (`npm run gen:api`, checked-in output, CI check that it
+  is current). Kills the backend↔frontend drift class; also makes the README knob
+  table generatable later (P11.3 tail).
+- [ ] **P17.5 — Environment reproducibility.** Turn the comment-instructions in
+  `requirements-gpu.txt` into an executable `scripts/install_gpu_stack.ps1`
+  (torch cu128 index, nunchaku wheel URL, verification step) and freeze the
+  *verified* working set with `pip freeze > requirements-gpu.lock` so the M0/M1
+  stack can be rebuilt after a disk failure without archaeology.
+- [ ] **P17.6 — Repo hygiene.** Untrack `frontend/tsconfig.tsbuildinfo`
+  (gitignore it); add a friendly-message layer over job errors so the UI shows a
+  readable line while `repr(exc)` goes to the P15.2 log.
+
+### P12 — Generation-page & arbiter loose ends (carried as-is)
+
+> The shipped P7/P8/P9 phases each left a small, named remainder. Lower priority
+> than the audit-driven phases above, but kept so they don't get lost.
+
+- [ ] **P12.1 — Learned-profile management.** A UI list of learned
+  `model_profiles` with a reset control (P7.2 tail), plus capture LLM-subprocess
+  VRAM (its `load_report` is currently `None`, so the LLM is the one model with
+  no measured figure).
+- [ ] **P12.2 — Per-job arbiter attribution.** Surface the blocking/swap reason
+  on the *exact* queued card (not just the Queue header) and add a
+  keep-warm-eviction reason (P7.1 tail).
 - [ ] **P12.3 — Inline previews on the Images tab.** Show the swap-plan preview
-  inline on the Images-tab queue (P7.4 tail) and add a quick reproduce/vary action
-  on the `ResultPreview` card (P8.3 tail).
+  inline on the Images-tab queue (P7.4 tail) and add a quick reproduce/vary
+  action on the `ResultPreview` card (P8.3 tail).
 - [ ] **P12.4 — Memory timeline depth.** Optional process-RSS series + hover
   tooltips on the System-tab sparkline (P7.3 tail).
 
-### P13 — Generation pages, round 2 (Images + LLM comfort)
+### P18 — Distribution & run story (NEW — audit W8)
 
-> Direct user feedback after living in the pages: the model **cards** (P8.4) eat
-> too much vertical space, the result strip is too small, the detail view can't
-> zoom, and there's no img2img. The card *styling* was liked — keep it, just move
-> it into a dropdown.
+> Today the app runs as uvicorn + Vite *dev* server on two ports. A production
+> mode simplifies daily use and halves the attack surface P14 protects.
 
-- [x] **P13.1 — Model picker back to a dropdown.** `Select` gained an optional
-  `renderOption` (keyboard-nav / search / click-outside intact); the new
-  `ModelPicker.tsx` wraps it so each option shows name + measured-VRAM + all badges
-  (family / quant / fast-path / slow / loaded) on **one row**. `ImageComposer`'s
-  `ModelCard` grid and the LLM page's plain model `Select` both use it now —
-  consistent and far more compact.
-- [x] **P13.2 — Bigger, scrollable result strip.** `ResultPreview`'s recent strip
-  now shows up to **50** larger (68px) tiles, wrapping into a bounded
-  (`max-h-44`) vertically-scrollable area.
-- [x] **P13.3 — Zoom in the detail view.** `ZoomableImage.tsx` (wheel zoom +
-  drag-pan + double-click reset + on-screen ±/Reset, clamped 1–8×) is used by both
-  the `ResultPreview` lightbox (now Esc-closable) and the History detail modal.
-- [x] **P13.4 — img2img (image + prompt → image).** *Shipped + real-GPU smoke
-  validated:* a
-  source-image upload (`POST /api/images/upload` → opaque token under
-  `outputs/uploads`, served back for preview), a composer drop/upload slot +
-  strength slider (SDXL-gated), the `init_image`/`strength` params flowing through
-  the queue, the STUB generation path, and tests (upload round-trip, SDXL-only
-  guard, strength clamp, low-step effective-strength guard, end-to-end stub job).
-  *Real path:* a SDXL
-  `StableDiffusionXLImg2ImgPipeline` sharing the resident pipeline's weights (no
-  extra VRAM), validated on RTX 5070 Ti with a 512² / 2-step smoke. FLUX/FLUX.2
-  img2img fail fast with a clear message until wired + validated on hardware.
-- [x] **P13.5 — Inpainting / region edit (mask).** Built on P13.4: the composer
-  now has a source-image mask canvas with brush, lasso/freehand fill, erase, undo,
-  clear, and feather controls. The mask is uploaded as a normalized PNG
-  (`POST /api/images/upload-mask`) and queued as `mask_image` alongside
-  `init_image`; STUB generation and upload round-trips are covered by tests. The
-  real SDXL path uses a `StableDiffusionXLInpaintPipeline` view sharing the
-  resident pipeline's weights (no extra resident model), validated on RTX 5070 Ti
-  with a 512² / 2-step smoke. FLUX/FLUX.2 still fail fast with a clear SDXL-only
-  message until their inpaint paths are wired and validated on hardware.
-- [x] **P13.6 — Selectable llama backend + context type (KV-cache quantization).**
-  The LLM panel gained a *Llama backend* dropdown and a *Context type* dropdown
-  next to *Context window*. Two builds are modelled (`LLAMA_BACKENDS` in
-  `config.py`): `default` (standard upstream llama.cpp) and `turbo` (a separate
-  TurboQuant-patched `llama-server`, path `HFAB_LLAMA_SERVER_BIN_TURBO`). Context
-  types (`CONTEXT_TYPES`): `f16` (default), `q8_0` (~2× smaller cache), `q4_0`
-  (~4×), and Google DeepMind's **TurboQuant** `turbo3` / `turbo4` — the last two
-  only offered when the `turbo` backend is selected. Each preset maps to
-  `--cache-type-k/-v` and forces `--flash-attn on` for quantized caches; the
-  active backend decides which `llama-server` binary launches. Changing either
-  relaunches `llama-server` via the existing ctx/ngl reload path
-  (`POST /api/llm/config { backend, context_type }`).
-  **No-surprise guarantees:** the API validates the `(backend, context_type)`
-  pair *before* committing (422 on an impossible explicit pairing; a backend
-  switch that orphans the current type gracefully resets it to `f16` with a note),
-  the backend preflights the pair + binary existence before spawning, and
-  `llama-server` stderr is drained into a 40-line ring buffer surfaced in startup
-  errors (so a bad launch reports *unknown cache type* instead of an opaque exit).
-  `q8_0`/`q4_0` work on any recent CUDA build; `turbo3`/`turbo4` need the patched
-  build at `HFAB_LLAMA_SERVER_BIN_TURBO`. Covered by 18 tests (arg-builder per
-  preset + per backend, stderr tail/bound, `/api/llm/config` get/set, invalid
-  pairings, graceful reset, 422s).
+- [ ] **P18.1 — Production serving mode.** `npm run build` output served by
+  FastAPI (StaticFiles + SPA fallback) behind `HFAB_SERVE_FRONTEND=true`; one
+  port, no Node at runtime. CI builds the frontend to prove the build stays
+  green.
+- [ ] **P18.2 — One-command launcher.** `run.bat`/`run.sh` gain a `--prod` path:
+  build-if-stale, start backend, wait on `/api/health`, open the browser. Stub
+  vs. real mode stays an env concern (`HFAB_STUB_MODE`).
+- [ ] **P18.3 — Writable settings (safe subset).** Promote the read-only settings
+  drawer: persist a whitelisted subset (defaults for steps/size, keep-warm
+  toggle, theme already local) to a `data/settings-overrides.json` loaded at
+  startup. Anything memory-safety-related stays env-only by design.
+- [ ] **P18.4 — Model download manager.** Surface `scripts/fetch_models.py` in
+  the UI: a curated list of the verified models (from
+  [imagefabric-models](docs) + MODEL_NOTICE.md) with size, license note, target
+  dir, and a progress bar; refuses to start a download the RAM/disk budget can't
+  hold.
+
+### P19 — Generation features (growth — after the foundation phases)
+
+- [ ] **P19.1 — FLUX / FLUX.2 img2img + inpaint.** Wire the two families through
+  the existing `init_image`/`mask_image` plumbing (currently SDXL-only,
+  fail-fast elsewhere); validate on hardware with the P16.5 checklist; respect
+  the klein 768² pin.
+- [ ] **P19.2 — Upscaler as an arbiter job.** A small Real-ESRGAN/SwinIR model
+  behind a new job type, loaded through the arbiter like everything else; "Upscale
+  2×/4×" action on `ResultPreview` and the History detail modal.
+- [ ] **P19.3 — ControlNet for SDXL.** One vetted ControlNet (canny or depth) as
+  an optional conditioning input in the composer, with the VRAM cost measured
+  and recorded in the model profile before it ships.
+- [ ] **P19.4 — Prompt library.** Named, taggable prompt/style snippets
+  (DB-backed, exportable) insertable from the composer and the chat `/image`
+  bridge; absorbs the existing prompt-history recall.
 
 ---
 
@@ -273,6 +334,23 @@ Done and in use. Kept terse on purpose — detailed run logs live in
   (`PATCH`/`DELETE /api/images/{id}`); multi-select bulk delete + ZIP export
   (`POST /api/images/export`); generation counters (total/today/per-model) in the
   History header + System tab.
+- **P10 — Test & CI safety net.** Unit tests for the pure logic (scheduler /
+  sysmon / model profiles), the hermetic STUB-mode integration test (one swap for
+  a mixed batch, images land in the gallery), Vitest + Testing Library on the
+  frontend, and `.github/workflows/ci.yml` (ruff + pytest + tsc + vitest on
+  push/PR). 143 tests green as of the 2026-06 audit.
+- **P11 — Code health & docs (first half).** Pure-logic helper extraction with
+  vitest suites (`chatHelpers.ts`, `imageComposerHelpers.ts`); committed ruff +
+  pytest config (75 mechanical fixes); README synced to the real M0/M1 state.
+  *Remaining halves → P16.3 (frontend lint), P17.1–.3 (the hard splits), P17.4
+  (generated knob table prerequisite).*
+- **P13 — Generation pages, round 2.** Model picker back to a one-row dropdown
+  (`ModelPicker.tsx`); bigger scrollable result strip; `ZoomableImage` lightbox;
+  img2img (upload → token → strength, SDXL real path validated on hardware);
+  inpainting with a full mask editor (brush/lasso/feather, SDXL inpaint pipeline
+  view validated); selectable llama backend + KV-cache context type incl.
+  TurboQuant (`turbo3`/`turbo4`) with pair validation + stderr surfacing, 18
+  tests.
 - **Images page rebuild + reliability.** Two-column composer | (result + queue);
   scroll/visibility fix; robust lightbox; composer persistence
   (`hfabric.image.composer`); cancel running jobs (`request_stop` →
@@ -312,5 +390,3 @@ Done and in use. Kept terse on purpose — detailed run logs live in
 - Anything touching model loading goes through the arbiter (`ensure`/`free_all`)
   and the `sysmon` budget — never load a model directly.
 - New env knobs follow the `HFAB_*` convention and are surfaced in `/api/settings`.
-</content>
-</invoke>
