@@ -1,83 +1,52 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api/client";
 import { Badge } from "./Badge";
 import { Select } from "./Select";
 import { Slider } from "./Slider";
 import { Toggle } from "./Toggle";
+import { Meter, PerformanceBreakdown, WaveformMonitor, type MeterSample } from "./VoiceMeters";
+import {
+  DeviceSelect,
+  LatencyMeter,
+  MonitorSelect,
+  OfflineDevice,
+  RoutingApplyHint,
+  Row,
+  SetupStep,
+  VoiceSlotList,
+  type RoutingApplyState,
+} from "./VoicePanelParts";
+import {
+  deviceName,
+  f0Options,
+  formatMs,
+  latencyPresets,
+  meter,
+  num,
+  perfSummary,
+  resolveMonitorDeviceId,
+  routingSettingsPatch,
+  sampleRates,
+  selectedModelId,
+  settingsToVoiceState,
+  waveformSlots,
+} from "./voiceHelpers";
 import type { VoiceSettingsUpdate, VoiceStatus } from "../types";
 
 const field = "w-full rounded-md border border-white/10 bg-black/30 px-2.5 py-1.5 text-sm outline-none focus:border-accent";
-const f0Options = [
-  { value: "rmvpe_onnx", label: "RMVPE ONNX" },
-  { value: "rmvpe", label: "RMVPE" },
-  { value: "crepe_onnx_tiny", label: "CREPE tiny ONNX" },
-  { value: "crepe_onnx_full", label: "CREPE full ONNX" },
-  { value: "crepe_tiny", label: "CREPE tiny" },
-  { value: "crepe_full", label: "CREPE full" },
-  { value: "fcpe", label: "FCPE" },
-  { value: "fcpe_onnx", label: "FCPE ONNX" },
-];
-
-const sampleRates = [16000, 24000, 44100, 48000, 96000];
-const latencyPresets = [
-  { id: "fast", label: "Fast", chunk: 96, crossFade: 0.03, extra: 3 },
-  { id: "balanced", label: "Balanced", chunk: 133, crossFade: 0.05, extra: 5 },
-  { id: "quality", label: "Quality", chunk: 192, crossFade: 0.08, extra: 7 },
-];
-const waveformSlots = 64;
-const timingLabels = ["prep", "f0", "infer", "post", "io", "mix"];
-
-type MeterSample = {
-  input: number;
-  output: number;
-};
-
-function size(bytes: number): string {
-  if (!bytes) return "0 B";
-  const gb = bytes / 1e9;
-  return gb >= 1 ? `${gb.toFixed(2)} GB` : `${(bytes / 1e6).toFixed(0)} MB`;
-}
-
-function num(value: unknown, fallback: number): number {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-}
 
 function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
-}
-
-function selectedModelId(status: VoiceStatus): string {
-  const slot = status.selected_model_slot;
-  return status.models.find((m) => m.slot === slot)?.id ?? status.models[0]?.id ?? "";
-}
-
-function perfSummary(performance: Record<string, unknown> | null): string {
-  if (!performance) return "...";
-  const entries = Object.entries(performance)
-    .filter(([, value]) => ["number", "string", "boolean"].includes(typeof value))
-    .slice(0, 3)
-    .map(([key, value]) => `${key}:${String(value)}`);
-  return entries.join(", ") || "available";
-}
-
-function deviceHint(hostApi: string, rate: number | null): string {
-  return [hostApi, rate ? `${rate / 1000}k` : ""].filter(Boolean).join(", ");
-}
-
-function meter(value: number): number {
-  return Math.round(Math.max(0, Math.min(1, value)) * 100);
-}
-
-function formatMs(value: number | null | undefined): string {
-  if (value === null || value === undefined || !Number.isFinite(Number(value))) return "...";
-  return `${Number(value).toFixed(1)} ms`;
 }
 
 function focusIsTextEntry(): boolean {
   const el = document.activeElement;
   if (!(el instanceof HTMLElement)) return false;
   return ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName) || el.isContentEditable;
+}
+
+function routingKey(body: VoiceSettingsUpdate): string {
+  return JSON.stringify(body);
 }
 
 export function VoicePanel() {
@@ -103,6 +72,10 @@ export function VoicePanel() {
   const [outputGain, setOutputGain] = useState(1);
   const [monitorGain, setMonitorGain] = useState(1);
   const [meterHistory, setMeterHistory] = useState<MeterSample[]>([]);
+  const [voicesOpen, setVoicesOpen] = useState(false);
+  const [routingApplyState, setRoutingApplyState] = useState<RoutingApplyState>("idle");
+  const lastAppliedRoutingKeyRef = useRef("");
+  const routingApplySeq = useRef(0);
 
   const refresh = useCallback(async () => {
     try {
@@ -124,6 +97,32 @@ export function VoicePanel() {
   const canControl = canReach && models.length > 0 && !busy;
   const live = Boolean(status?.server_audio_enabled || status?.voice_lane_active);
   const streamStarted = Boolean(status?.server_audio_started);
+  const monitorOn = monitorDeviceId >= 0;
+
+  const routingPatch = useMemo(() => routingSettingsPatch({
+    inputDeviceId,
+    outputDeviceId,
+    monitorDeviceId,
+    sampleRate,
+    readChunkSize,
+    crossFadeOverlap,
+    extraConvert,
+    inputGain,
+    outputGain,
+    monitorGain,
+  }), [
+    crossFadeOverlap,
+    extraConvert,
+    inputDeviceId,
+    inputGain,
+    monitorDeviceId,
+    monitorGain,
+    outputDeviceId,
+    outputGain,
+    readChunkSize,
+    sampleRate,
+  ]);
+  const currentRoutingKey = useMemo(() => routingKey(routingPatch), [routingPatch]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 
@@ -137,24 +136,25 @@ export function VoicePanel() {
 
   useEffect(() => {
     if (!status) return;
-    setModelId((prev) => selectedModelId(status) || prev);
-    setPitch(num(status.settings.tran, 0));
-    setFormantShift(num(status.settings.formantShift, 0));
-    setIndexRatio(num(status.settings.indexRatio, 1));
-    setProtect(num(status.settings.protect, 0.5));
-    const f0 = String(status.settings.f0Detector ?? "rmvpe_onnx");
-    setF0Detector(f0Options.some((o) => o.value === f0) ? f0 : "rmvpe_onnx");
-    setPassThrough(Boolean(status.settings.passThrough));
-    setInputDeviceId(num(status.settings.serverInputDeviceId, -1));
-    setOutputDeviceId(num(status.settings.serverOutputDeviceId, -1));
-    setMonitorDeviceId(num(status.settings.serverMonitorDeviceId, -1));
-    setSampleRate(num(status.settings.serverAudioSampleRate, 48000));
-    setReadChunkSize(num(status.settings.serverReadChunkSize, 133));
-    setCrossFadeOverlap(num(status.settings.crossFadeOverlapSize, 0.05));
-    setExtraConvert(num(status.settings.extraConvertSize, 5));
-    setInputGain(num(status.settings.serverInputAudioGain, 1));
-    setOutputGain(num(status.settings.serverOutputAudioGain, 1));
-    setMonitorGain(num(status.settings.serverMonitorAudioGain, 1));
+    setModelId((prev) => selectedModelId(status.models, status.selected_model_slot) || prev);
+    const next = settingsToVoiceState(status.settings);
+    setPitch(next.pitch);
+    setFormantShift(next.formantShift);
+    setIndexRatio(next.indexRatio);
+    setProtect(next.protect);
+    setF0Detector(next.f0Detector);
+    setPassThrough(next.passThrough);
+    setInputDeviceId(next.inputDeviceId);
+    setOutputDeviceId(next.outputDeviceId);
+    setMonitorDeviceId(next.monitorDeviceId);
+    setSampleRate(next.sampleRate);
+    setReadChunkSize(next.readChunkSize);
+    setCrossFadeOverlap(next.crossFadeOverlap);
+    setExtraConvert(next.extraConvert);
+    setInputGain(next.inputGain);
+    setOutputGain(next.outputGain);
+    setMonitorGain(next.monitorGain);
+    lastAppliedRoutingKeyRef.current = routingKey(routingSettingsPatch(next));
   }, [status]);
 
   useEffect(() => {
@@ -166,6 +166,43 @@ export function VoicePanel() {
     setMeterHistory((prev) => [...prev.slice(-(waveformSlots - 1)), sample]);
   }, [status]);
 
+  useEffect(() => {
+    if (!canReach) {
+      setRoutingApplyState("idle");
+      return;
+    }
+    if (!lastAppliedRoutingKeyRef.current) {
+      lastAppliedRoutingKeyRef.current = currentRoutingKey;
+      return;
+    }
+    if (currentRoutingKey === lastAppliedRoutingKeyRef.current) return;
+
+    setRoutingApplyState("pending");
+    const requestKey = currentRoutingKey;
+    const seq = routingApplySeq.current + 1;
+    routingApplySeq.current = seq;
+    const id = window.setTimeout(async () => {
+      if (requestKey === lastAppliedRoutingKeyRef.current) {
+        setRoutingApplyState("applied");
+        return;
+      }
+      setRoutingApplyState("applying");
+      setError("");
+      try {
+        const next = await api.voiceApplySettings(routingPatch);
+        if (seq !== routingApplySeq.current) return;
+        lastAppliedRoutingKeyRef.current = requestKey;
+        setStatus(next);
+        setRoutingApplyState("applied");
+      } catch (err) {
+        if (seq !== routingApplySeq.current) return;
+        setRoutingApplyState("error");
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    }, 400);
+    return () => window.clearTimeout(id);
+  }, [canReach, currentRoutingKey, routingPatch]);
+
   const body = (): VoiceSettingsUpdate => ({
     model_id: modelId || null,
     pitch,
@@ -174,16 +211,7 @@ export function VoicePanel() {
     protect,
     f0_detector: f0Detector,
     pass_through: passThrough,
-    server_input_device_id: inputDeviceId,
-    server_output_device_id: outputDeviceId,
-    server_monitor_device_id: monitorDeviceId,
-    server_audio_sample_rate: sampleRate,
-    server_read_chunk_size: readChunkSize,
-    cross_fade_overlap_size: crossFadeOverlap,
-    extra_convert_size: extraConvert,
-    server_input_gain: inputGain,
-    server_output_gain: outputGain,
-    server_monitor_gain: monitorGain,
+    ...routingPatch,
   });
 
   async function pollForServer() {
@@ -224,11 +252,24 @@ export function VoicePanel() {
 
   const onApply = () => run("apply", () => api.voiceApplySettings(body()));
 
-  const applyPatch = (label: string, patch: VoiceSettingsUpdate) => run(label, () => api.voiceApplySettings({ ...body(), ...patch }));
+  const applyPatch = (label: string, patch: VoiceSettingsUpdate) => run(label, () => api.voiceApplySettings(patch));
 
   const onLive = (next: boolean) => run(next ? "live-on" : "live-off", () => (
     next ? api.voiceStartSession(body()) : api.voiceStopSession()
   ));
+
+  const onMonitor = (next: boolean) => {
+    if (!next) {
+      setMonitorDeviceId(-1);
+      return;
+    }
+    const resolved = resolveMonitorDeviceId(monitorDeviceId, outputDeviceId, outputDevices);
+    if (resolved < 0) {
+      setError("No output device is available for monitoring");
+      return;
+    }
+    setMonitorDeviceId(resolved);
+  };
 
   const onBypass = (next: boolean) => {
     setPassThrough(next);
@@ -250,13 +291,6 @@ export function VoicePanel() {
     setReadChunkSize(preset.chunk);
     setCrossFadeOverlap(preset.crossFade);
     setExtraConvert(preset.extra);
-    if (canReach) {
-      void applyPatch("preset", {
-        server_read_chunk_size: preset.chunk,
-        cross_fade_overlap_size: preset.crossFade,
-        extra_convert_size: preset.extra,
-      });
-    }
   };
 
   useEffect(() => {
@@ -301,105 +335,174 @@ export function VoicePanel() {
         <div className="rounded-md border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{error}</div>
       ) : null}
 
-      <section className="rounded-lg border border-white/10 bg-surface p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <div className="text-xs font-medium uppercase tracking-wide text-white/40">Engine</div>
-          <div className="flex items-center gap-2">
+      <div className="grid gap-3 xl:grid-cols-[0.9fr_1.15fr_2fr_1.8fr]">
+        <SetupStep step="1" title="Engine" aside={(
+          <Badge color={canReach ? "bg-emerald-700/55 text-emerald-100" : "bg-white/10 text-white/55"}>
+            {canReach ? "reachable" : "offline"}
+          </Badge>
+        )}>
+          <div className="flex flex-wrap gap-1.5">
             <Badge color={status?.wokada_installed ? "bg-emerald-700/55 text-emerald-100" : "bg-amber-600/40 text-amber-100"}>
               {status?.wokada_installed ? "installed" : "missing"}
             </Badge>
-            <Badge color={canReach ? "bg-emerald-700/55 text-emerald-100" : "bg-white/10 text-white/55"}>
-              {canReach ? "reachable" : "offline"}
-            </Badge>
             {status?.server_running ? <Badge color="bg-sky-700/50 text-sky-100">managed</Badge> : null}
           </div>
-        </div>
-
-        <div className="grid gap-2 text-sm md:grid-cols-2">
-          <Row label="Executable" value={status?.executable ?? "not found"} ok={status?.wokada_installed} mono />
-          <Row label="Server" value={status?.server_url ?? "..."} ok={canReach} mono />
-          <Row label="Selected" value={selected?.name ?? (status?.selected_model_slot ? `slot ${status.selected_model_slot}` : "none")} />
-          <Row label="Performance" value={perfSummary(status?.performance ?? null)} />
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <button
-            onClick={onStartServer}
-            disabled={!status?.wokada_installed || canReach || Boolean(busy)}
-            className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-30 disabled:hover:bg-emerald-600"
-          >
-            {busy === "start-server" ? "Starting..." : "Start server"}
-          </button>
-          <button
-            onClick={onStopServer}
-            disabled={!status?.server_running || Boolean(busy)}
-            className="rounded-md border border-red-400/35 px-3 py-1.5 text-sm font-medium text-red-100 hover:bg-red-400/10 disabled:opacity-30"
-          >
-            {busy === "stop-server" ? "Stopping..." : "Stop server"}
-          </button>
-          {canReach ? (
-            <a
-              href={status?.server_url}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-md border border-white/15 px-3 py-1.5 text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
+          <div className="mt-3 grid gap-1.5 text-sm">
+            <Row label="Executable" value={status?.executable ?? "not found"} ok={status?.wokada_installed} mono />
+            <Row label="Server" value={status?.server_url ?? "..."} ok={canReach} mono />
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button
+              onClick={onStartServer}
+              disabled={!status?.wokada_installed || canReach || Boolean(busy)}
+              className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-30 disabled:hover:bg-emerald-600"
             >
-              Open w-okada UI
-            </a>
+              {busy === "start-server" ? "Starting..." : "Start server"}
+            </button>
+            <button
+              onClick={onStopServer}
+              disabled={!status?.server_running || Boolean(busy)}
+              className="rounded-md border border-red-400/35 px-3 py-1.5 text-sm font-medium text-red-100 hover:bg-red-400/10 disabled:opacity-30"
+            >
+              {busy === "stop-server" ? "Stopping..." : "Stop server"}
+            </button>
+            {canReach ? (
+              <a
+                href={status?.server_url}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-md border border-white/15 px-3 py-1.5 text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
+              >
+                Open UI
+              </a>
+            ) : null}
+          </div>
+        </SetupStep>
+
+        <SetupStep step="2" title="Voice" aside={<Badge>{models.length}</Badge>}>
+          <Select
+            value={modelId}
+            onChange={setModelId}
+            placeholder="no voices"
+            options={models.map((m) => ({ value: m.id, label: m.name, hint: `#${m.slot}` }))}
+          />
+          <div className="mt-3 grid gap-1.5 text-sm">
+            <Row label="Selected" value={selected?.name ?? (status?.selected_model_slot ? `slot ${status.selected_model_slot}` : "none")} />
+            <Row label="Performance" value={perfSummary(status?.performance ?? null)} />
+          </div>
+          <button
+            type="button"
+            onClick={() => setVoicesOpen((open) => !open)}
+            className="mt-3 w-full rounded-md border border-white/10 px-2.5 py-1.5 text-left text-xs uppercase tracking-wide text-white/50 transition hover:bg-white/10 hover:text-white/75"
+          >
+            Voice slots
+          </button>
+          {voicesOpen ? (
+            <VoiceSlotList models={models} modelId={modelId} modelDir={status?.model_dir} onSelect={setModelId} />
           ) : null}
-        </div>
-      </section>
+        </SetupStep>
+
+        <SetupStep step="3" title="Audio devices" aside={(
+          <RoutingApplyHint canReach={canReach} state={routingApplyState} />
+        )}>
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-white/40">
+            {canReach ? `${inputDevices.length} inputs / ${outputDevices.length} outputs` : "Start the engine to list devices"}
+          </div>
+          <div className="grid gap-3 md:grid-cols-3">
+            {canReach ? (
+              <>
+                <DeviceSelect
+                  label="Input"
+                  value={inputDeviceId}
+                  devices={inputDevices}
+                  fallback="No input selected"
+                  onChange={setInputDeviceId}
+                />
+                <DeviceSelect
+                  label="Output"
+                  value={outputDeviceId}
+                  devices={outputDevices}
+                  fallback="No output selected"
+                  onChange={setOutputDeviceId}
+                />
+                <MonitorSelect
+                  value={monitorDeviceId}
+                  devices={outputDevices}
+                  onChange={setMonitorDeviceId}
+                />
+              </>
+            ) : (
+              <>
+                <OfflineDevice label="Input" />
+                <OfflineDevice label="Output" />
+                <OfflineDevice label="Monitor" />
+              </>
+            )}
+          </div>
+        </SetupStep>
+
+        <SetupStep step="4" title="Go live" aside={(
+          <Badge color={streamStarted ? "bg-emerald-700/55 text-emerald-100" : live ? "bg-sky-700/50 text-sky-100" : "bg-white/10 text-white/55"}>
+            {streamStarted ? "streaming" : live ? "armed" : "off"}
+          </Badge>
+        )}>
+          <div className="grid gap-3">
+            <div className={`rounded-md border px-3 py-2 ${live ? "border-emerald-400/30 bg-emerald-400/10" : "border-white/10 bg-black/20"}`}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-sm font-medium text-white/80">{live ? "Live voice active" : "Live voice off"}</div>
+                  <div className="mt-0.5 text-xs text-white/35">{canReach ? "server API ready" : "engine offline"}</div>
+                </div>
+                <Toggle checked={live} onChange={onLive} disabled={!canControl && !live} ariaLabel="Toggle live voice" />
+              </div>
+            </div>
+
+            <div className={`rounded-md border px-3 py-2 ${monitorOn ? "border-sky-400/30 bg-sky-400/10" : "border-white/10 bg-black/20"}`}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-white/80">Monitor</span>
+                    <Badge color={monitorOn ? "bg-sky-700/50 text-sky-100" : "bg-white/10 text-white/55"}>
+                      {monitorOn ? "on" : "off"}
+                    </Badge>
+                  </div>
+                  <div className="mt-0.5 truncate text-xs text-white/35" title={deviceName(outputDevices, monitorDeviceId, "Off")}>
+                    {deviceName(outputDevices, monitorDeviceId, "Off")}
+                  </div>
+                </div>
+                <Toggle checked={monitorOn} onChange={onMonitor} disabled={!canReach} ariaLabel="Toggle monitor" />
+              </div>
+              <div className="mt-2">
+                <div className="text-xs uppercase tracking-wide text-white/40">Monitor gain</div>
+                <Slider value={monitorGain} min={0} max={2} step={0.01} onChange={setMonitorGain} />
+              </div>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Meter label="Input" value={meter(status?.metrics.input_vu ?? 0)} />
+              <Meter label={monitorOn ? "Output / monitor" : "Output"} value={meter(status?.metrics.output_vu ?? 0)} tone="sky" />
+              <LatencyMeter value={status?.metrics.total_ms ?? status?.metrics.chunk_ms} />
+            </div>
+          </div>
+        </SetupStep>
+      </div>
 
       <section className="rounded-lg border border-white/10 bg-surface p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-white/40">Live controls</div>
-            <div className="mt-1 text-xs text-white/35">
-              {canReach ? "server API ready" : "start MMVCServerSIO first"}
-            </div>
+            <div className="text-xs font-medium uppercase tracking-wide text-white/40">Tuning</div>
+            <div className="mt-1 text-xs text-white/35">{selected?.name ?? "no voice selected"}</div>
           </div>
-          <div className="flex items-center gap-2 text-xs text-white/55">
-            <span>{streamStarted ? "Stream on" : live ? "Live armed" : "Live off"}</span>
-            <Toggle checked={live} onChange={onLive} disabled={!canControl && !live} />
-          </div>
+          <button
+            onClick={onApply}
+            disabled={!canControl}
+            className="rounded-md border border-white/15 px-3 py-1.5 text-sm font-medium text-white/75 transition hover:bg-white/10 hover:text-white disabled:opacity-30"
+          >
+            {busy === "apply" ? "Applying..." : "Apply tuning"}
+          </button>
         </div>
 
-        <div className="mb-4 grid gap-3 md:grid-cols-3">
-          <Meter label="Input" value={meter(status?.metrics.input_vu ?? 0)} />
-          <Meter label="Output" value={meter(status?.metrics.output_vu ?? 0)} />
-          <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="uppercase tracking-wide text-white/40">Latency</span>
-              <span className="font-mono text-white/65">
-                {formatMs(status?.metrics.total_ms ?? status?.metrics.chunk_ms)}
-              </span>
-            </div>
-            <div className="mt-2 h-1.5 rounded-full bg-white/10">
-              <div
-                className="h-full rounded-full bg-sky-400/80"
-                style={{ width: `${Math.min(100, Math.max(6, Number(status?.metrics.total_ms ?? status?.metrics.chunk_ms ?? 0)))}%` }}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="mb-4 grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
-          <WaveformMonitor samples={meterHistory} />
-          <PerformanceBreakdown metrics={status?.metrics} />
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <label>
-            <div className="text-xs uppercase tracking-wide text-white/40">Voice</div>
-            <Select
-              value={modelId}
-              onChange={setModelId}
-              placeholder="no voices"
-              className="mt-1"
-              options={models.map((m) => ({ value: m.id, label: m.name, hint: `#${m.slot}` }))}
-            />
-          </label>
-
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <label>
             <div className="text-xs uppercase tracking-wide text-white/40">F0 detector</div>
             <Select value={f0Detector} onChange={setF0Detector} className="mt-1" options={f0Options} />
@@ -433,19 +536,17 @@ export function VoicePanel() {
             <Slider value={protect} min={0} max={1} step={0.01} onChange={setProtect} />
           </div>
 
-          <div className="flex items-end">
-            <button
-              onClick={onApply}
-              disabled={!canControl}
-              className="w-full rounded-md border border-white/15 px-3 py-1.5 text-sm font-medium text-white/75 transition hover:bg-white/10 hover:text-white disabled:opacity-30"
-            >
-              {busy === "apply" ? "Applying..." : "Apply settings"}
-            </button>
+          <div>
+            <div className="text-xs uppercase tracking-wide text-white/40">Input gain</div>
+            <Slider value={inputGain} min={0} max={2} step={0.01} onChange={setInputGain} />
           </div>
-        </div>
 
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 px-3 py-2">
-          <div className="flex items-center gap-4">
+          <div>
+            <div className="text-xs uppercase tracking-wide text-white/40">Output gain</div>
+            <Slider value={outputGain} min={0} max={2} step={0.01} onChange={setOutputGain} />
+          </div>
+
+          <div className="flex items-end justify-between gap-3 rounded-md border border-white/10 bg-black/20 px-3 py-2">
             <label className="flex items-center gap-2 text-xs text-white/55">
               <Toggle checked={passThrough} onChange={onBypass} disabled={!canReach || Boolean(busy)} />
               Bypass
@@ -455,13 +556,21 @@ export function VoicePanel() {
               PTT
             </label>
           </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/10 bg-black/20 px-3 py-2">
+          <div className="text-xs uppercase tracking-wide text-white/40">Latency presets</div>
           <div className="flex gap-1.5">
             {latencyPresets.map((preset) => (
               <button
                 key={preset.id}
                 onClick={() => onPreset(preset)}
                 disabled={!canReach || Boolean(busy)}
-                className="rounded border border-white/10 px-2 py-1 text-xs text-white/65 transition hover:bg-white/10 disabled:opacity-30"
+                className={`rounded border px-2 py-1 text-xs transition disabled:opacity-30 ${
+                  readChunkSize === preset.chunk && crossFadeOverlap === preset.crossFade && extraConvert === preset.extra
+                    ? "border-accent/40 bg-accent/15 text-white"
+                    : "border-white/10 text-white/65 hover:bg-white/10"
+                }`}
               >
                 {preset.label}
               </button>
@@ -473,9 +582,9 @@ export function VoicePanel() {
       <section className="rounded-lg border border-white/10 bg-surface p-4">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-white/40">Audio routing</div>
+            <div className="text-xs font-medium uppercase tracking-wide text-white/40">Audio engine</div>
             <div className="mt-1 text-xs text-white/35">
-              {canReach ? `${inputDevices.length} inputs / ${outputDevices.length} outputs` : "available after server start"}
+              <RoutingApplyHint canReach={canReach} state={routingApplyState} />
             </div>
           </div>
           <Badge color={streamStarted ? "bg-emerald-700/55 text-emerald-100" : "bg-white/10 text-white/55"}>
@@ -484,55 +593,6 @@ export function VoicePanel() {
         </div>
 
         <div className="grid gap-3 md:grid-cols-3">
-          <label>
-            <div className="text-xs uppercase tracking-wide text-white/40">Input</div>
-            <Select
-              value={String(inputDeviceId)}
-              onChange={(v) => setInputDeviceId(Number(v))}
-              placeholder="start server"
-              className="mt-1"
-              options={inputDevices.map((d) => ({
-                value: d.id,
-                label: d.name,
-                hint: deviceHint(d.host_api, d.default_sample_rate),
-              }))}
-            />
-          </label>
-
-          <label>
-            <div className="text-xs uppercase tracking-wide text-white/40">Output</div>
-            <Select
-              value={String(outputDeviceId)}
-              onChange={(v) => setOutputDeviceId(Number(v))}
-              placeholder="start server"
-              className="mt-1"
-              options={outputDevices.map((d) => ({
-                value: d.id,
-                label: d.name,
-                hint: deviceHint(d.host_api, d.default_sample_rate),
-              }))}
-            />
-          </label>
-
-          <label>
-            <div className="text-xs uppercase tracking-wide text-white/40">Monitor</div>
-            <Select
-              value={String(monitorDeviceId)}
-              onChange={(v) => setMonitorDeviceId(Number(v))}
-              className="mt-1"
-              options={[
-                { value: "-1", label: "none" },
-                ...outputDevices.map((d) => ({
-                  value: d.id,
-                  label: d.name,
-                  hint: deviceHint(d.host_api, d.default_sample_rate),
-                })),
-              ]}
-            />
-          </label>
-        </div>
-
-        <div className="mt-3 grid gap-3 md:grid-cols-3">
           <label>
             <div className="text-xs uppercase tracking-wide text-white/40">Sample rate</div>
             <Select
@@ -555,14 +615,9 @@ export function VoicePanel() {
             />
           </label>
 
-          <div className="flex items-end">
-            <button
-              onClick={onApply}
-              disabled={!canReach || Boolean(busy)}
-              className="w-full rounded-md border border-white/15 px-3 py-1.5 text-sm font-medium text-white/75 transition hover:bg-white/10 hover:text-white disabled:opacity-30"
-            >
-              {busy === "apply" ? "Applying..." : "Apply routing"}
-            </button>
+          <div>
+            <div className="text-xs uppercase tracking-wide text-white/40">Extra buffer</div>
+            <Slider value={extraConvert} min={0} max={10} step={0.1} onChange={setExtraConvert} />
           </div>
         </div>
 
@@ -571,179 +626,24 @@ export function VoicePanel() {
             <div className="text-xs uppercase tracking-wide text-white/40">Crossfade</div>
             <Slider value={crossFadeOverlap} min={0} max={0.2} step={0.01} onChange={setCrossFadeOverlap} />
           </div>
-          <div>
-            <div className="text-xs uppercase tracking-wide text-white/40">Extra buffer</div>
-            <Slider value={extraConvert} min={0} max={10} step={0.1} onChange={setExtraConvert} />
-          </div>
-        </div>
-
-        <div className="mt-3 grid gap-3 md:grid-cols-3">
-          <div>
-            <div className="text-xs uppercase tracking-wide text-white/40">Input gain</div>
-            <Slider value={inputGain} min={0} max={2} step={0.01} onChange={setInputGain} />
-          </div>
-          <div>
-            <div className="text-xs uppercase tracking-wide text-white/40">Output gain</div>
-            <Slider value={outputGain} min={0} max={2} step={0.01} onChange={setOutputGain} />
-          </div>
-          <div>
-            <div className="text-xs uppercase tracking-wide text-white/40">Monitor gain</div>
-            <Slider value={monitorGain} min={0} max={2} step={0.01} onChange={setMonitorGain} />
+          <div className="grid gap-2 rounded-md border border-white/10 bg-black/20 px-3 py-2 text-sm md:grid-cols-3">
+            <Row label="Input" value={canReach ? deviceName(inputDevices, inputDeviceId, "None") : "offline"} />
+            <Row label="Output" value={canReach ? deviceName(outputDevices, outputDeviceId, "None") : "offline"} />
+            <Row label="Monitor" value={canReach ? deviceName(outputDevices, monitorDeviceId, "Off") : "offline"} />
           </div>
         </div>
       </section>
 
       <section className="rounded-lg border border-white/10 bg-surface p-4">
         <div className="mb-3 flex items-center justify-between">
-          <div className="text-xs font-medium uppercase tracking-wide text-white/40">Voices</div>
-          <Badge>{models.length}</Badge>
+          <div className="text-xs font-medium uppercase tracking-wide text-white/40">Diagnostics</div>
+          <Badge>{formatMs(status?.metrics.total_ms ?? status?.metrics.chunk_ms)}</Badge>
         </div>
-        {models.length === 0 ? (
-          <p className="text-sm leading-6 text-white/40">
-            No voice slots found in <code className="text-white/60">{status?.model_dir ?? "model_dir"}</code>.
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-1.5">
-            {models.map((m) => (
-              <li
-                key={m.id}
-                onClick={() => setModelId(m.id)}
-                className={`flex cursor-pointer items-center justify-between gap-2 rounded-md border px-3 py-2 transition ${
-                  m.id === modelId ? "border-accent/40 bg-accent/10" : "border-white/10 bg-black/20 hover:bg-white/5"
-                }`}
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <span className="text-[10px] text-white/30">#{m.slot}</span>
-                  <span className="min-w-0 truncate text-sm text-white/80" title={m.name}>{m.name}</span>
-                </span>
-                <span className="flex shrink-0 items-center gap-1.5">
-                  <Badge color="bg-accent/50 text-accent-fg">{m.type}{m.version ? ` ${m.version}` : ""}</Badge>
-                  {m.f0 ? <Badge color="bg-sky-700/50 text-sky-100">f0</Badge> : null}
-                  {m.has_index ? <Badge color="bg-emerald-700/55 text-emerald-100">index</Badge> : <Badge>no index</Badge>}
-                  <span className="font-mono text-xs text-white/35">{size(m.size_bytes)}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
+          <WaveformMonitor samples={meterHistory} />
+          <PerformanceBreakdown metrics={status?.metrics} />
+        </div>
       </section>
-    </div>
-  );
-}
-
-function WaveformMonitor({ samples }: { samples: MeterSample[] }) {
-  const bars = Array.from({ length: waveformSlots }, (_, index) => {
-    const offset = samples.length - waveformSlots + index;
-    return offset >= 0 ? samples[offset] : { input: 0, output: 0 };
-  });
-  const latest = samples[samples.length - 1] ?? { input: 0, output: 0 };
-
-  return (
-    <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2">
-      <div className="flex items-center justify-between gap-3 text-xs">
-        <span className="uppercase tracking-wide text-white/40">Waveform</span>
-        <span className="font-mono text-white/55">
-          in {meter(latest.input)}% / out {meter(latest.output)}%
-        </span>
-      </div>
-      <div className="mt-3 flex h-24 items-center gap-px overflow-hidden rounded bg-black/25 px-2 py-2">
-        {bars.map((sample, index) => {
-          const inputHeight = sample.input > 0 ? Math.max(2, sample.input * 46) : 0;
-          const outputHeight = sample.output > 0 ? Math.max(2, sample.output * 46) : 0;
-          return (
-            <div key={index} className="relative h-full min-w-0 flex-1">
-              <div className="absolute left-0 right-0 top-1/2 h-px bg-white/10" />
-              <div
-                className="absolute bottom-1/2 left-0 right-0 rounded-t-sm bg-emerald-400/80"
-                style={{ height: `${inputHeight}%` }}
-              />
-              <div
-                className="absolute left-0 right-0 top-1/2 rounded-b-sm bg-sky-400/75"
-                style={{ height: `${outputHeight}%` }}
-              />
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function PerformanceBreakdown({ metrics }: { metrics?: VoiceStatus["metrics"] }) {
-  const timings = (metrics?.timings_ms ?? []).filter((value) => Number.isFinite(value)).slice(0, 6);
-  const total = metrics?.total_ms ?? null;
-  const chunk = metrics?.chunk_ms ?? null;
-  const max = Math.max(1, Number(total ?? 0), Number(chunk ?? 0), ...timings);
-
-  return (
-    <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2">
-      <div className="flex items-center justify-between gap-3 text-xs">
-        <span className="uppercase tracking-wide text-white/40">Timing</span>
-        <span className="font-mono text-white/55">{formatMs(total ?? chunk)}</span>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-2">
-        <MetricPill label="chunk" value={formatMs(chunk)} />
-        <MetricPill label="total" value={formatMs(total)} />
-      </div>
-      <div className="mt-3 flex flex-col gap-2">
-        {timings.length === 0 ? (
-          <div className="rounded border border-white/10 bg-white/[0.03] px-2 py-1.5 text-xs text-white/35">waiting for stages</div>
-        ) : (
-          timings.map((value, index) => (
-            <div key={`${index}-${value}`} className="min-w-0">
-              <div className="flex items-center justify-between gap-3 text-[11px]">
-                <span className="truncate uppercase tracking-wide text-white/35">{timingLabels[index] ?? `stage ${index + 1}`}</span>
-                <span className="shrink-0 font-mono text-white/55">{formatMs(value)}</span>
-              </div>
-              <div className="mt-1 h-1 rounded-full bg-white/10">
-                <div
-                  className="h-full rounded-full bg-accent/75"
-                  style={{ width: `${Math.min(100, Math.max(4, (value / max) * 100))}%` }}
-                />
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-function MetricPill({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 rounded border border-white/10 bg-white/[0.03] px-2 py-1.5">
-      <div className="truncate text-[10px] uppercase tracking-wide text-white/30">{label}</div>
-      <div className="truncate font-mono text-xs text-white/65">{value}</div>
-    </div>
-  );
-}
-
-function Meter({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2">
-      <div className="flex items-center justify-between text-xs">
-        <span className="uppercase tracking-wide text-white/40">{label}</span>
-        <span className="font-mono text-white/65">{value}%</span>
-      </div>
-      <div className="mt-2 h-1.5 rounded-full bg-white/10">
-        <div className="h-full rounded-full bg-emerald-400/80 transition-[width]" style={{ width: `${value}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function Row({ label, value, ok, mono = false }: { label: string; value: string; ok?: boolean; mono?: boolean }) {
-  return (
-    <div className="grid min-w-0 grid-cols-[92px_1fr] gap-2">
-      <span className="shrink-0 text-white/40">{label}</span>
-      <span
-        className={`min-w-0 truncate ${mono ? "font-mono text-xs" : ""} ${
-          ok === undefined ? "text-white/70" : ok ? "text-emerald-300/80" : "text-amber-300/70"
-        }`}
-        title={value}
-      >
-        {value}
-      </span>
     </div>
   );
 }

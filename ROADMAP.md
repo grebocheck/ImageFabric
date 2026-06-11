@@ -94,8 +94,15 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
   shipped (see [voice-routing.md](docs/voice-routing.md)). *Remaining:* validate
   selectors live + friendlier handling of unsupported sample-rate combos.
 - [~] **P6.4 — The UI (the differentiator).** Live metrics, VU bars, waveform,
-  pitch/formant controls, presets, PTT shipped. *Remaining:* validate
-  meters/timings against a real stream; tune stage labels.
+  pitch/formant controls, presets, PTT shipped. *2026-06 UX rework (user
+  feedback):* the page is now a guided setup flow (Engine → Voice → Audio
+  devices → Go live) with the input/output/monitor pickers promoted to a
+  first-class step, an explicit **Monitor "hear myself" toggle** (auto-picks the
+  output device, gain beside it), debounced auto-apply for all routing changes
+  with an applying/applied hint, and pure logic extracted to `voiceHelpers.ts`
+  (+10 tests; `VoiceMeters.tsx` / `VoicePanelParts.tsx` split keeps the panel at
+  ~650 lines). *Remaining:* validate meters/timings against a real stream; tune
+  stage labels.
 - [ ] **P6.5 — End-to-end live validation (gates the phase).** With a real mic +
   virtual cable: start a session, confirm conversion + monitor output, measure
   round-trip latency at 2–3 chunk sizes, confirm the voice lane actually parks a
