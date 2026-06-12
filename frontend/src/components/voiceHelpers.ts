@@ -12,6 +12,13 @@ export const f0Options = [
 ];
 
 export const sampleRates = [16000, 24000, 44100, 48000, 96000];
+export const inputHighpassOptions = [
+  { value: "0", label: "Off" },
+  { value: "60", label: "60 Hz" },
+  { value: "80", label: "80 Hz" },
+  { value: "120", label: "120 Hz" },
+  { value: "160", label: "160 Hz" },
+];
 
 export const latencyPresets = [
   { id: "fast", label: "Fast", chunk: 96, crossFade: 0.03, extra: 3 },
@@ -25,6 +32,8 @@ export const timingLabels = ["prep", "f0", "infer", "post", "io", "mix"];
 export type VoiceControlState = {
   pitch: number;
   formantShift: number;
+  inputGateDb: number;
+  inputHighpassHz: number;
   indexRatio: number;
   protect: number;
   f0Detector: string;
@@ -64,7 +73,9 @@ export function nativeSettingsToVoiceState(settings: Partial<Record<keyof VoiceE
   const f0 = String(settings.f0_detector ?? "rmvpe");
   return {
     pitch: num(settings.pitch, 0),
-    formantShift: 0,
+    formantShift: num(settings.input_formant, 0),
+    inputGateDb: num(settings.input_gate_db, -60),
+    inputHighpassHz: num(settings.input_highpass_hz, 80),
     indexRatio: num(settings.index_ratio, 1),
     protect: num(settings.protect, 0.5),
     f0Detector: f0Options.some((o) => o.value === f0) ? f0 : "rmvpe",
@@ -99,10 +110,20 @@ export function nativeRoutingSettingsPatch(state: VoiceRoutingState): VoiceEngin
 
 export function nativeTuningSettingsPatch(state: Pick<
   VoiceControlState,
-  "pitch" | "indexRatio" | "protect" | "f0Detector" | "passThrough"
+  | "pitch"
+  | "formantShift"
+  | "inputGateDb"
+  | "inputHighpassHz"
+  | "indexRatio"
+  | "protect"
+  | "f0Detector"
+  | "passThrough"
 >): VoiceEngineSettingsUpdate {
   return {
     pitch: state.pitch,
+    input_formant: state.formantShift,
+    input_gate_db: state.inputGateDb,
+    input_highpass_hz: state.inputHighpassHz,
     index_ratio: state.indexRatio,
     protect: state.protect,
     f0_detector: state.f0Detector,

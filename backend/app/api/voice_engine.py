@@ -33,6 +33,9 @@ class VoiceEngineSettingsUpdate(BaseModel):
     index_ratio: float | None = None
     protect: float | None = None
     f0_detector: str | None = None
+    input_highpass_hz: int | str | None = None
+    input_gate_db: float | str | None = None
+    input_formant: float | None = None
     server_input_device_id: int | None = None
     server_output_device_id: int | None = None
     server_monitor_device_id: int | None = None
@@ -140,6 +143,9 @@ async def voice_engine_convert(
     pitch: int | None = Form(None),
     index_ratio: float | None = Form(None),
     protect: float | None = Form(None),
+    input_highpass_hz: str | None = Form(None),
+    input_gate_db: str | None = Form(None),
+    input_formant: float | None = Form(None),
 ) -> dict[str, Any]:
     engine = get_engine()
     if engine.get_model(model_id) is None:
@@ -166,6 +172,9 @@ async def voice_engine_convert(
                 pitch=pitch,
                 index_ratio=index_ratio,
                 protect=protect,
+                input_highpass_hz=input_highpass_hz,
+                input_gate_db=input_gate_db,
+                input_formant=input_formant,
             )
         except wave.Error as exc:
             raise HTTPException(415, f"unsupported or corrupt WAV input: {exc}") from exc

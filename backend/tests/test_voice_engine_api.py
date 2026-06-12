@@ -64,6 +64,9 @@ async def test_settings_clamps_and_rejects_bad_f0(client):
             "pitch": 99,
             "index_ratio": 3,
             "protect": -1,
+            "input_highpass_hz": 999,
+            "input_gate_db": -999,
+            "input_formant": 9,
             "server_input_gain": 9,
             "server_output_gain": -2,
         },
@@ -73,8 +76,16 @@ async def test_settings_clamps_and_rejects_bad_f0(client):
     assert current["pitch"] == 24
     assert current["index_ratio"] == 1.0
     assert current["protect"] == 0.0
+    assert current["input_highpass_hz"] == 300
+    assert current["input_gate_db"] == -90.0
+    assert current["input_formant"] == 2.0
     assert current["server_input_gain"] == 4.0
     assert current["server_output_gain"] == 0.0
+
+    off = await client.post("/api/voice/engine/settings", json={"input_gate_db": 0, "input_highpass_hz": "off"})
+    assert off.status_code == 200
+    assert off.json()["settings"]["input_gate_db"] == -90.0
+    assert off.json()["settings"]["input_highpass_hz"] == 0
 
     bad = await client.post("/api/voice/engine/settings", json={"f0_detector": "nope"})
     assert bad.status_code == 400
@@ -83,7 +94,15 @@ async def test_settings_clamps_and_rejects_bad_f0(client):
 async def test_convert_round_trip_is_deterministic(client):
     model_id = _add_fake_slot()
     payload = _wav_bytes()
-    data = {"model_id": model_id, "pitch": "5", "index_ratio": "0.25", "protect": "0.3"}
+    data = {
+        "model_id": model_id,
+        "pitch": "5",
+        "index_ratio": "0.25",
+        "protect": "0.3",
+        "input_highpass_hz": "120",
+        "input_gate_db": "-50",
+        "input_formant": "1.5",
+    }
 
     first = await client.post(
         "/api/voice/engine/convert",
@@ -106,6 +125,9 @@ async def test_convert_round_trip_is_deterministic(client):
     assert first_body["sample_rate"] == 16000
     assert first_body["model_id"] == model_id
     assert first_body["params"]["pitch"] == 5
+    assert first_body["params"]["input_highpass_hz"] == 120
+    assert first_body["params"]["input_gate_db"] == -50.0
+    assert first_body["params"]["input_formant"] == 1.5
     assert "stub_convert" in first_body["timings_ms"]
 
     first_wav = (await client.get(first_body["url"])).content

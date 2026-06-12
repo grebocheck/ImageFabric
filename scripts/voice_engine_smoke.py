@@ -29,6 +29,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", type=Path, default=DEFAULT_MODEL)
     parser.add_argument("--device", default="cpu")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument("--formant", type=float, default=1.0)
     return parser.parse_args()
 
 
@@ -106,8 +107,17 @@ def spectral_flatness(audio: np.ndarray) -> float:
     y = np.asarray(audio, dtype=np.float64).reshape(-1)
     if y.size == 0:
         return 0.0
-    mag = np.abs(np.fft.rfft(y)) + 1e-12
+    mag = np.abs(np.fft.rfft(y * np.hanning(y.size))) + 1e-12
     return float(np.exp(np.mean(np.log(mag))) / np.mean(mag))
+
+
+def spectral_centroid(audio: np.ndarray, sr: int) -> float:
+    y = np.asarray(audio, dtype=np.float64).reshape(-1)
+    if y.size == 0:
+        return 0.0
+    mag = np.abs(np.fft.rfft(y * np.hanning(y.size))) + 1e-12
+    freqs = np.fft.rfftfreq(y.size, 1.0 / sr)
+    return float(np.sum(freqs * mag) / np.sum(mag))
 
 
 def validate_output(
@@ -217,6 +227,34 @@ def main() -> int:
     )
     validate_output("convert_index_0_5", out1, sr1, input_duration=input_duration)
     print_timings("convert_index_0_5", timings1)
+
+    out_formant, sr_formant, timings_formant = pipeline.convert(
+        input_path,
+        loaded,
+        pitch=0,
+        index_ratio=0.0,
+        protect=0.5,
+        f0_detector="rmvpe",
+        input_formant=args.formant,
+        device=args.device,
+    )
+    validate_output("convert_formant", out_formant, sr_formant, input_duration=input_duration)
+    print_timings("convert_formant", timings_formant)
+    formant_duration = len(out_formant) / float(sr_formant)
+    if not (input_duration * 0.95 <= formant_duration <= input_duration * 1.05):
+        raise AssertionError(
+            f"convert_formant: duration {formant_duration:.3f}s is not within 5% of {input_duration:.3f}s"
+        )
+    base_centroid = spectral_centroid(out0, sr0)
+    formant_centroid = spectral_centroid(out_formant, sr_formant)
+    print(
+        f"formant_centroid: base_hz={base_centroid:.3f} "
+        f"formant_{args.formant:+.2f}_hz={formant_centroid:.3f}"
+    )
+    if args.formant > 0 and formant_centroid <= base_centroid:
+        raise AssertionError("positive formant did not raise converted spectral centroid")
+    if args.formant < 0 and formant_centroid >= base_centroid:
+        raise AssertionError("negative formant did not lower converted spectral centroid")
 
     out_path = args.out if args.out.is_absolute() else ROOT / args.out
     out_path.parent.mkdir(parents=True, exist_ok=True)

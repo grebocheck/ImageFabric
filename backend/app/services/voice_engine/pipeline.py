@@ -7,6 +7,7 @@ from pathlib import Path
 import time
 from typing import Any
 
+from . import dsp
 from .f0 import create_f0_extractor
 from .features import ContentVec
 
@@ -195,6 +196,9 @@ def convert(
     protect: float,
     f0_detector: str,
     device: str,
+    input_highpass_hz: int = dsp.DEFAULT_INPUT_HIGHPASS_HZ,
+    input_gate_db: float = dsp.DEFAULT_INPUT_GATE_DB,
+    input_formant: float = dsp.DEFAULT_INPUT_FORMANT,
 ):
     import numpy as np  # noqa: PLC0415
     import soundfile as sf  # noqa: PLC0415
@@ -218,6 +222,9 @@ def convert(
         index_ratio=index_ratio,
         protect=protect,
         f0_detector=f0_detector,
+        input_highpass_hz=input_highpass_hz,
+        input_gate_db=input_gate_db,
+        input_formant=input_formant,
         device=device,
     )
     timings.update(core_timings)
@@ -233,6 +240,9 @@ def convert_audio(
     protect: float,
     f0_detector: str,
     device: str,
+    input_highpass_hz: int = dsp.DEFAULT_INPUT_HIGHPASS_HZ,
+    input_gate_db: float = dsp.DEFAULT_INPUT_GATE_DB,
+    input_formant: float = dsp.DEFAULT_INPUT_FORMANT,
 ):
     """Shared conversion core: 16 kHz mono float32 array -> (audio @ model sr,
     sr, per-stage timings). The offline file path and the realtime chunk
@@ -243,7 +253,16 @@ def convert_audio(
     timings: dict[str, float] = {}
 
     stage = time.perf_counter()
-    base_features = loaded.content_vec.extract(audio_16k)
+    analysis_audio, formant_factor = dsp.process_input(
+        audio_16k,
+        input_highpass_hz=input_highpass_hz,
+        input_gate_db=input_gate_db,
+        input_formant=input_formant,
+    )
+    timings["input_dsp"] = _ms(stage)
+
+    stage = time.perf_counter()
+    base_features = loaded.content_vec.extract(analysis_audio)
     timings["content_vec"] = _ms(stage)
 
     stage = time.perf_counter()
@@ -260,8 +279,9 @@ def convert_audio(
     stage = time.perf_counter()
     if loaded.f0:
         extractor = create_f0_extractor(f0_detector, loaded.f0_model_path, device)
-        f0 = extractor.compute(audio_16k, sr=16000)
+        f0 = extractor.compute(analysis_audio, sr=16000)
         f0 = _resize_1d(f0, features.shape[0])
+        f0 = dsp.compensate_f0_for_input_formant(f0, formant_factor)
         if pitch:
             f0 = f0 * (2.0 ** (float(pitch) / 12.0))
         pitch_coarse = f0_to_coarse(f0)
@@ -295,6 +315,11 @@ def convert_audio(
 
     stage = time.perf_counter()
     out = output.detach().cpu().numpy().reshape(-1).astype(np.float32)
+    out = dsp.compensate_output_duration_for_input_formant(
+        out,
+        formant_factor,
+        sample_rate=loaded.sample_rate,
+    )
     peak = float(np.max(np.abs(out))) if out.size else 0.0
     if peak > 1.0:
         out = out / peak

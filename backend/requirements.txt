@@ -14,3 +14,5 @@ python-multipart==0.0.20
 Pillow==11.1.0
 psutil==6.1.1
 nvidia-ml-py==12.560.30   # NVML VRAM telemetry without creating a CUDA context
+numpy>=1.26
+soxr>=1.0

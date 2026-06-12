@@ -145,6 +145,11 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
   `frontend/ npm.cmd test`, `backend/ .venv\Scripts\python.exe -m pytest -p
   no:cacheprovider` (workspace temp root), and `backend/ ruff check app tests`
   are green.
+- [x] **P6R polish - Input-side cleanup + character.** Added dependency-light
+  numpy DSP before ContentVec/RMVPE: smooth FFT high-pass, RMS noise gate, and
+  input-side formant/brightness with f0 compensation so the existing pitch knob
+  remains the pitch control. The realtime path applies it to the rolling context
+  before chunk-tail stitching; offline `/convert` accepts compact overrides.
 - [~] **P6R.4 — Live validation + legacy voice removal (gates the phase).** Code
   part done 2026-06-12: deleted the old wrapper router, launch path, settings,
   pidfile reap hook, discovery fallbacks, frontend legacy client/types/helpers,

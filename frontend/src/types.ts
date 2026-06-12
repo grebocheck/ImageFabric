@@ -507,6 +507,9 @@ export interface VoiceEngineSettings {
   index_ratio: number;
   protect: number;
   f0_detector: string;
+  input_highpass_hz: number;
+  input_gate_db: number;
+  input_formant: number;
   server_input_device_id: number | null;
   server_output_device_id: number | null;
   server_monitor_device_id: number | null;
@@ -525,6 +528,9 @@ export interface VoiceEngineSettingsUpdate {
   index_ratio?: number | null;
   protect?: number | null;
   f0_detector?: string | null;
+  input_highpass_hz?: number | string | null;
+  input_gate_db?: number | string | null;
+  input_formant?: number | null;
   server_input_device_id?: number | null;
   server_output_device_id?: number | null;
   server_monitor_device_id?: number | null;
@@ -578,6 +584,9 @@ export interface VoiceEngineConvertResult {
     index_ratio: number;
     protect: number;
     f0_detector: string;
+    input_highpass_hz: number;
+    input_gate_db: number;
+    input_formant: number;
   };
 }
 

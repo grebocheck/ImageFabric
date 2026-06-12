@@ -131,6 +131,9 @@ def bench_chunk_size(
         index_ratio=engine.index_ratio,
         protect=engine.protect,
         f0_detector=engine.f0_detector,
+        input_highpass_hz=engine.input_highpass_hz,
+        input_gate_db=engine.input_gate_db,
+        input_formant=engine.input_formant,
         device=engine.device,
     )
     offline_stream = soxr.resample(offline, model_sr, stream_sr).astype(np.float32)

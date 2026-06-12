@@ -177,6 +177,9 @@ class Settings(BaseSettings):
     voice_index_ratio: float = 1.0
     voice_protect: float = 0.5
     voice_f0_detector: str = "rmvpe"
+    voice_input_highpass_hz: int = 80
+    voice_input_gate_db: float = -60.0
+    voice_input_formant: float = 0.0
 
     # --- FLUX loading (M0 finding) ---
     # The local flux_dev is an fp8 all-in-one checkpoint; diffusers needs a

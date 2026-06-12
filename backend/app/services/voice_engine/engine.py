@@ -9,7 +9,7 @@ import wave
 
 from ...config import settings
 from . import assets as asset_discovery
-from . import slots
+from . import dsp, slots
 from .f0 import F0_DETECTORS, SUPPORTED_DETECTORS
 
 
@@ -58,6 +58,9 @@ class ConvertParams:
     index_ratio: float
     protect: float
     f0_detector: str
+    input_highpass_hz: int
+    input_gate_db: float
+    input_formant: float
 
     def public(self) -> dict[str, float | int | str]:
         return {
@@ -65,6 +68,9 @@ class ConvertParams:
             "index_ratio": self.index_ratio,
             "protect": self.protect,
             "f0_detector": self.f0_detector,
+            "input_highpass_hz": self.input_highpass_hz,
+            "input_gate_db": self.input_gate_db,
+            "input_formant": self.input_formant,
         }
 
 
@@ -74,6 +80,9 @@ class VoiceEngine:
         self.index_ratio = _clamp_ratio(settings.voice_index_ratio)
         self.protect = _clamp_ratio(settings.voice_protect)
         self.f0_detector = _validate_f0_detector(settings.voice_f0_detector)
+        self.input_highpass_hz = dsp.clamp_input_highpass_hz(settings.voice_input_highpass_hz)
+        self.input_gate_db = dsp.clamp_input_gate_db(settings.voice_input_gate_db)
+        self.input_formant = dsp.clamp_input_formant(settings.voice_input_formant)
         self.device = settings.voice_device
         self.server_input_device_id: int | None = None
         self.server_output_device_id: int | None = None
@@ -101,6 +110,9 @@ class VoiceEngine:
             "index_ratio": self.index_ratio,
             "protect": self.protect,
             "f0_detector": self.f0_detector,
+            "input_highpass_hz": self.input_highpass_hz,
+            "input_gate_db": self.input_gate_db,
+            "input_formant": self.input_formant,
             "server_input_device_id": self.server_input_device_id,
             "server_output_device_id": self.server_output_device_id,
             "server_monitor_device_id": self.server_monitor_device_id,
@@ -123,6 +135,12 @@ class VoiceEngine:
             self.protect = _clamp_ratio(data["protect"])
         if data.get("f0_detector") is not None:
             self.f0_detector = _validate_f0_detector(str(data["f0_detector"]))
+        if data.get("input_highpass_hz") is not None:
+            self.input_highpass_hz = dsp.clamp_input_highpass_hz(data["input_highpass_hz"])
+        if data.get("input_gate_db") is not None:
+            self.input_gate_db = dsp.clamp_input_gate_db(data["input_gate_db"])
+        if data.get("input_formant") is not None:
+            self.input_formant = dsp.clamp_input_formant(data["input_formant"])
         if data.get("server_input_device_id") is not None:
             self.server_input_device_id = _clamp_device_id(data["server_input_device_id"])
         if data.get("server_output_device_id") is not None:
@@ -214,12 +232,22 @@ class VoiceEngine:
         pitch: int | None,
         index_ratio: float | None,
         protect: float | None,
+        input_highpass_hz: int | str | None = None,
+        input_gate_db: float | str | None = None,
+        input_formant: float | None = None,
     ) -> ConvertParams:
         return ConvertParams(
             pitch=self.pitch if pitch is None else _clamp_pitch(pitch),
             index_ratio=self.index_ratio if index_ratio is None else _clamp_ratio(index_ratio),
             protect=self.protect if protect is None else _clamp_ratio(protect),
             f0_detector=self.f0_detector,
+            input_highpass_hz=(
+                self.input_highpass_hz
+                if input_highpass_hz is None
+                else dsp.clamp_input_highpass_hz(input_highpass_hz)
+            ),
+            input_gate_db=self.input_gate_db if input_gate_db is None else dsp.clamp_input_gate_db(input_gate_db),
+            input_formant=self.input_formant if input_formant is None else dsp.clamp_input_formant(input_formant),
         )
 
     async def unload(self) -> None:
@@ -244,8 +272,11 @@ class VoiceEngine:
         pitch: int | None = None,
         index_ratio: float | None = None,
         protect: float | None = None,
+        input_highpass_hz: int | str | None = None,
+        input_gate_db: float | str | None = None,
+        input_formant: float | None = None,
     ) -> dict:
-        params = self._params(pitch, index_ratio, protect)
+        params = self._params(pitch, index_ratio, protect, input_highpass_hz, input_gate_db, input_formant)
         async with self._lock:
             if settings.stub_mode:
                 return await asyncio.to_thread(
@@ -351,6 +382,9 @@ class VoiceEngine:
             index_ratio=params.index_ratio,
             protect=params.protect,
             f0_detector=params.f0_detector,
+            input_highpass_hz=params.input_highpass_hz,
+            input_gate_db=params.input_gate_db,
+            input_formant=params.input_formant,
             device=self.device,
         )
         output_path.parent.mkdir(parents=True, exist_ok=True)

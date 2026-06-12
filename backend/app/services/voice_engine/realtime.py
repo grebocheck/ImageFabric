@@ -119,6 +119,9 @@ class ChunkProcessor:
 
         from . import pipeline  # noqa: PLC0415
 
+        # Input cleanup/formant DSP runs inside convert_audio on the full
+        # rolling context, not on only the new raw chunk, so the converted tail
+        # used for stitching is derived from the same processed history.
         converted, model_sr, core_timings = pipeline.convert_audio(
             self._context_16k,
             self._loaded,
@@ -126,6 +129,9 @@ class ChunkProcessor:
             index_ratio=self._engine.index_ratio,
             protect=self._engine.protect,
             f0_detector=self._engine.f0_detector,
+            input_highpass_hz=self._engine.input_highpass_hz,
+            input_gate_db=self._engine.input_gate_db,
+            input_formant=self._engine.input_formant,
             device=self._engine.device,
         )
         timings.update(core_timings)

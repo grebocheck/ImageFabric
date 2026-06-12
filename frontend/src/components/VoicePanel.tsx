@@ -20,6 +20,7 @@ import {
   deviceName,
   f0Options,
   formatMs,
+  inputHighpassOptions,
   latencyPresets,
   meter,
   nativeRoutingSettingsPatch,
@@ -87,6 +88,9 @@ export function VoicePanel() {
   const [busy, setBusy] = useState("");
   const [modelId, setModelId] = useState("");
   const [pitch, setPitch] = useState(0);
+  const [formantShift, setFormantShift] = useState(0);
+  const [inputGateDb, setInputGateDb] = useState(-60);
+  const [inputHighpassHz, setInputHighpassHz] = useState(80);
   const [indexRatio, setIndexRatio] = useState(1);
   const [protect, setProtect] = useState(0.5);
   const [f0Detector, setF0Detector] = useState("rmvpe");
@@ -108,6 +112,7 @@ export function VoicePanel() {
   const [offlineFile, setOfflineFile] = useState<File | null>(null);
   const [offlineModelId, setOfflineModelId] = useState("");
   const [offlinePitch, setOfflinePitch] = useState(0);
+  const [offlineFormant, setOfflineFormant] = useState(0);
   const [offlineBusy, setOfflineBusy] = useState(false);
   const [offlineError, setOfflineError] = useState("");
   const [offlineResult, setOfflineResult] = useState<VoiceEngineConvertResult | null>(null);
@@ -184,6 +189,10 @@ export function VoicePanel() {
     const next = nativeSettingsToVoiceState(status.settings);
     setPitch(next.pitch);
     setOfflinePitch(next.pitch);
+    setFormantShift(next.formantShift);
+    setOfflineFormant(next.formantShift);
+    setInputGateDb(next.inputGateDb);
+    setInputHighpassHz(next.inputHighpassHz);
     setIndexRatio(next.indexRatio);
     setProtect(next.protect);
     setF0Detector(next.f0Detector);
@@ -249,6 +258,9 @@ export function VoicePanel() {
 
   const tuningPatch = (): VoiceEngineSettingsUpdate => nativeTuningSettingsPatch({
     pitch,
+    formantShift,
+    inputGateDb,
+    inputHighpassHz,
     indexRatio,
     protect,
     f0Detector,
@@ -332,6 +344,7 @@ export function VoicePanel() {
     form.append("file", offlineFile);
     form.append("model_id", offlineModelId);
     form.append("pitch", String(offlinePitch));
+    form.append("input_formant", String(offlineFormant));
     setOfflineBusy(true);
     setOfflineError("");
     setOfflineResult(null);
@@ -624,6 +637,40 @@ export function VoicePanel() {
             <Slider value={protect} min={0} max={1} step={0.01} onChange={setProtect} />
           </div>
 
+          <div className="md:col-span-2 xl:col-span-4">
+            <div className="text-xs uppercase tracking-wide text-white/40">Input clean-up & character</div>
+            <div className="mt-2 grid gap-3 md:grid-cols-3">
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs text-white/45">Formant</div>
+                  <div className="font-mono text-xs text-white/45">{formantShift.toFixed(2)}</div>
+                </div>
+                <Slider value={formantShift} min={-2} max={2} step={0.05} onChange={setFormantShift} />
+                <div className="mt-1 text-[11px] text-white/35">input-side: brighter &lt;-&gt; deeper, pitch stays</div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs text-white/45">Noise gate</div>
+                  <div className="font-mono text-xs text-white/45">
+                    {inputGateDb <= -90 ? "off" : `${inputGateDb.toFixed(0)} dB`}
+                  </div>
+                </div>
+                <Slider value={inputGateDb} min={-90} max={-20} step={1} onChange={setInputGateDb} />
+              </div>
+
+              <label>
+                <div className="text-xs text-white/45">High-pass</div>
+                <Select
+                  value={String(inputHighpassHz)}
+                  onChange={(value) => setInputHighpassHz(Number(value))}
+                  className="mt-1.5"
+                  options={inputHighpassOptions}
+                />
+              </label>
+            </div>
+          </div>
+
           <div>
             <div className="text-xs uppercase tracking-wide text-white/40">Input gain</div>
             <Slider value={inputGain} min={0} max={2} step={0.01} onChange={setInputGain} />
@@ -737,7 +784,7 @@ export function VoicePanel() {
           <div className="mb-3 rounded-md border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{offlineError}</div>
         ) : null}
 
-        <div className="grid gap-3 md:grid-cols-[1.3fr_1fr_0.5fr_auto]">
+        <div className="grid gap-3 md:grid-cols-[1.3fr_1fr_0.5fr_0.6fr_auto]">
           <label>
             <div className="text-xs uppercase tracking-wide text-white/40">Audio file</div>
             <input
@@ -769,6 +816,18 @@ export function VoicePanel() {
               className={`${field} mt-1`}
             />
           </label>
+          <label>
+            <div className="text-xs uppercase tracking-wide text-white/40">Formant</div>
+            <input
+              type="number"
+              min={-2}
+              max={2}
+              step={0.05}
+              value={offlineFormant}
+              onChange={(event) => setOfflineFormant(Number(event.target.value))}
+              className={`${field} mt-1`}
+            />
+          </label>
           <div className="flex items-end">
             <button
               onClick={() => void onOfflineConvert()}
@@ -793,6 +852,7 @@ export function VoicePanel() {
               </a>
               <span className="text-xs text-white/45">
                 {offlineResult.sample_rate} Hz / {offlineResult.duration_s.toFixed(2)} s / pitch {offlineResult.params.pitch}
+                {" / "}formant {offlineResult.params.input_formant.toFixed(2)}
               </span>
             </div>
             <div className="mt-2 text-xs text-white/40">{timingsLine(offlineResult.timings_ms)}</div>

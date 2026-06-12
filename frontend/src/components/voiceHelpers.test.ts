@@ -48,6 +48,9 @@ describe("settings coercion", () => {
   it("maps native snake_case settings and preserves unselected input/output devices as null patches", () => {
     expect(nativeSettingsToVoiceState({
       pitch: "2",
+      input_formant: "1.25",
+      input_gate_db: "-55",
+      input_highpass_hz: "120",
       index_ratio: "0.25",
       protect: "0.4",
       f0_detector: "rmvpe",
@@ -64,7 +67,9 @@ describe("settings coercion", () => {
       server_monitor_gain: 0.6,
     })).toMatchObject({
       pitch: 2,
-      formantShift: 0,
+      formantShift: 1.25,
+      inputGateDb: -55,
+      inputHighpassHz: 120,
       indexRatio: 0.25,
       protect: 0.4,
       f0Detector: "rmvpe",
@@ -104,12 +109,18 @@ describe("settings coercion", () => {
   it("builds a native tuning settings patch", () => {
     expect(nativeTuningSettingsPatch({
       pitch: -3,
+      formantShift: 0.5,
+      inputGateDb: -70,
+      inputHighpassHz: 80,
       indexRatio: 0.4,
       protect: 0.2,
       f0Detector: "rmvpe",
       passThrough: false,
     })).toEqual({
       pitch: -3,
+      input_formant: 0.5,
+      input_gate_db: -70,
+      input_highpass_hz: 80,
       index_ratio: 0.4,
       protect: 0.2,
       f0_detector: "rmvpe",
