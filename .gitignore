@@ -6,6 +6,7 @@ models/tts/**
 models/transcribe/**
 models/embed/**
 models/vision/**
+models/voice/**
 !models/image/.gitkeep
 !models/llm/.gitkeep
 *.safetensors
@@ -13,6 +14,9 @@ models/vision/**
 *.ckpt
 *.pt
 *.bin
+*.pth
+*.onnx
+*.index
 
 # --- Python ---
 __pycache__/

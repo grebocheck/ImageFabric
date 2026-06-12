@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import subprocess
+import sys
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -21,15 +22,19 @@ from pydantic import BaseModel
 
 from ..config import settings
 from ..core.arbiter import GpuArbiter
+from ..core.enums import EventType
+from ..core.events import EventBus
 from ..core.scheduler import Worker
 from ..util import uploads as uploads_util
-from .deps import get_arbiter, get_worker
+from ..util.pidfiles import remove_pidfile, wokada_pidfile, write_pidfile
+from .deps import get_arbiter, get_bus, get_worker
 
 router = APIRouter(prefix="/api/voice", tags=["voice"])
 
 # Handle to the w-okada server we launched (None if we didn't start it).
 _proc: subprocess.Popen | None = None
 _session_active = False
+_native_session_active = False
 
 F0_DETECTORS = {
     "rmvpe_onnx",
@@ -73,12 +78,21 @@ def stop_server() -> bool:
     if _proc is None:
         return False
     try:
-        subprocess.run(
-            ["taskkill", "/PID", str(_proc.pid), "/T", "/F"],
-            capture_output=True,
-            check=False,
-        )
+        if sys.platform == "win32":
+            subprocess.run(
+                ["taskkill", "/PID", str(_proc.pid), "/T", "/F"],
+                capture_output=True,
+                check=False,
+            )
+        else:
+            _proc.terminate()
+            try:
+                _proc.wait(timeout=10.0)
+            except subprocess.TimeoutExpired:
+                _proc.kill()
+                _proc.wait(timeout=10.0)
     finally:
+        remove_pidfile(wokada_pidfile())
         _proc = None
         _session_active = False
     return True
@@ -440,6 +454,8 @@ async def voice_lane_active() -> bool:
     w-okada server-audio mode (until P6R.4 removes it)."""
     from ..services.voice_engine import realtime  # noqa: PLC0415
 
+    if _native_session_active:
+        return True
     if realtime.session_active():
         return True
     if _session_active:
@@ -448,6 +464,11 @@ async def voice_lane_active() -> bool:
     if not info:
         return False
     return _bool_setting(info.get("enableServerAudio")) or _bool_setting(info.get("serverAudioStated"))
+
+
+def set_native_voice_lane_active(active: bool) -> None:
+    global _native_session_active
+    _native_session_active = active
 
 
 @router.post("/start")
@@ -470,6 +491,7 @@ async def voice_start() -> dict:
         )
     except OSError as exc:
         raise HTTPException(500, f"could not start w-okada: {exc}") from exc
+    write_pidfile(wokada_pidfile(), _proc.pid)
     return {"running": True, "pid": _proc.pid}
 
 
@@ -491,6 +513,7 @@ async def voice_session_start(
     body: VoiceSettingsUpdate,
     arbiter: GpuArbiter = Depends(get_arbiter),
     worker: Worker = Depends(get_worker),
+    bus: EventBus = Depends(get_bus),
 ) -> dict:
     """Enable w-okada server-audio mode after releasing HFabric's GPU resident."""
     global _session_active
@@ -503,16 +526,18 @@ async def voice_session_start(
     await _wokada_update("enableServerAudio", 1)
     await _wokada_update("serverAudioStated", 1)
     _session_active = True
+    bus.emit(EventType.VOICE_SESSION_STARTED, engine="w-okada", model_id=body.model_id)
     return await _status_payload()
 
 
 @router.post("/session/stop")
-async def voice_session_stop() -> dict:
+async def voice_session_stop(bus: EventBus = Depends(get_bus)) -> dict:
     global _session_active
     if await _server_reachable():
         await _wokada_update("serverAudioStated", 0)
         await _wokada_update("enableServerAudio", 0)
     _session_active = False
+    bus.emit(EventType.VOICE_SESSION_STOPPED, engine="w-okada")
     return await _status_payload()
 
 

@@ -535,6 +535,45 @@ the backend with `HFAB_SDXL_TURBO_LORA=<path>`. The local M1 run used
 `models/lora/sdxl_lightning_4step_lora.safetensors`, `HFAB_SDXL_TURBO_STEPS=4`,
 and `HFAB_SDXL_TURBO_GUIDANCE=1.0`.
 
+### Database migrations
+
+The backend runs Alembic `upgrade head` during startup. Migration files live in
+`backend/migrations/versions/`; `0000_current_schema` is the baseline schema and
+later revisions carry incremental changes.
+
+To add a column:
+
+1. Update the SQLAlchemy model in `backend/app/db/models.py`.
+2. Add a new Alembic revision under `backend/migrations/versions/` with the next
+   revision id and `down_revision` set to the current head.
+3. In `upgrade()`, add the column with a server default if existing rows need a
+   non-null value.
+4. Add or update a test that boots a fresh DB and, when relevant, upgrades a
+   legacy raw-SQL DB.
+
+## Backup & restore
+
+Run a local backup from the repo root:
+
+```powershell
+python .\scripts\backup.py --keep 10
+```
+
+The script writes `data/backups/hfabric-<timestamp>/hfabric.db` using SQLite's
+live-safe backup API and `outputs-manifest.json`, a manifest of `data/outputs/`
+with relative paths, sizes, and mtimes. It does not copy output image/audio
+bytes; keep `data/outputs/` in your normal file backup if you need to restore
+artifacts.
+
+Restore order:
+
+1. Stop HFabric.
+2. Copy the saved `hfabric.db` back to `data/hfabric.db`.
+3. Restore `data/outputs/` from your file backup, preserving relative paths from
+   `outputs-manifest.json`.
+4. Start HFabric; startup migrations will bring the restored DB to the current
+   schema if needed.
+
 ## Testing
 
 The whole pipeline runs in STUB mode (no GPU/ML stack), so the memory-budget

@@ -23,6 +23,7 @@ from ..config import (
     resolve_llama_backend,
     settings,
 )
+from ..util.pidfiles import llama_server_pidfile, remove_pidfile, write_pidfile
 from .base import LLMBackend, ModelDescriptor, TokenCb
 
 
@@ -116,8 +117,13 @@ class LlamaCppBackend(LLMBackend):
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE,
         )
+        write_pidfile(llama_server_pidfile(), self._proc.pid)
         self._stderr_task = asyncio.create_task(self._drain_stderr())
-        await self._wait_healthy()
+        try:
+            await self._wait_healthy()
+        except Exception:
+            await self._cleanup_process()
+            raise
 
     async def _drain_stderr(self) -> None:
         """Continuously copy the server's stderr into the ring buffer so the pipe
@@ -164,18 +170,25 @@ class LlamaCppBackend(LLMBackend):
     async def unload(self) -> None:
         if not self._loaded:
             return
+        await self._cleanup_process()
+        self._loaded = False
+
+    async def _cleanup_process(self) -> None:
         if not settings.stub_mode and self._proc is not None:
-            self._proc.terminate()
-            try:
-                await asyncio.wait_for(self._proc.wait(), timeout=10.0)
-            except TimeoutError:
-                self._proc.kill()
+            if self._proc.returncode is None:
+                self._proc.terminate()
+                try:
+                    await asyncio.wait_for(self._proc.wait(), timeout=10.0)
+                except TimeoutError:
+                    self._proc.kill()
+                    await self._proc.wait()
+            else:
                 await self._proc.wait()
+            remove_pidfile(llama_server_pidfile())
         if self._stderr_task is not None:
             self._stderr_task.cancel()
             self._stderr_task = None
         self._proc = None
-        self._loaded = False
 
     # ------------------------------------------------------------- complete
     async def complete(self, params: dict[str, Any], on_token: TokenCb | None = None) -> str:

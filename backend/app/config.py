@@ -114,6 +114,9 @@ class Settings(BaseSettings):
     voice_pretrain_dir: Path = ROOT / "models" / "voice" / "pretrain"
     data_dir: Path = ROOT / "data"
     outputs_dir: Path = ROOT / "data" / "outputs"
+    logs_dir: Path = ROOT / "data" / "logs"
+    runtime_dir: Path = ROOT / "data" / "runtime"
+    backups_dir: Path = ROOT / "data" / "backups"
     db_path: Path = ROOT / "data" / "hfabric.db"
 
     # --- llama.cpp ---
@@ -322,6 +325,9 @@ class Settings(BaseSettings):
         for d in (
             self.data_dir,
             self.outputs_dir,
+            self.logs_dir,
+            self.runtime_dir,
+            self.backups_dir,
             self.image_models_dir,
             self.lora_models_dir,
             self.llm_models_dir,

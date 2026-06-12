@@ -13,6 +13,7 @@ import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
 import json
+import os
 import re
 from typing import Any
 
@@ -23,11 +24,25 @@ from ..backends.registry import ModelRegistry
 from ..db.models import Image, Job
 from ..db.session import session_scope
 from ..services.rag_service import search_documents as run_rag_search
+from ..util import voice_lane
 from .arbiter import GpuArbiter
 from .enums import EventType, JobStatus, JobType
 from .events import Event, EventBus
 
 _THINK_RE = re.compile(r"<think(?:ing)?>.*?</think(?:ing)?>", re.IGNORECASE | re.DOTALL)
+_FORCED_VOICE_LANE = False
+_VOICE_LANE_ENV = "HFAB_RUNTIME_VOICE_LANE_ACTIVE"
+
+
+def set_forced_voice_lane(active: bool) -> None:
+    global _FORCED_VOICE_LANE
+    _FORCED_VOICE_LANE = active
+    os.environ[_VOICE_LANE_ENV] = "1" if active else "0"
+    voice_lane.set_active(active)
+
+
+def forced_voice_lane_active() -> bool:
+    return _FORCED_VOICE_LANE or os.environ.get(_VOICE_LANE_ENV) == "1" or voice_lane.is_active()
 
 
 def _coerce_int(value: Any, default: int, *, min_value: int, max_value: int) -> int:
@@ -110,6 +125,7 @@ class Worker:
         self._current_job_id: str | None = None
         self._cancel_current = False
         self._voice_parked = False
+        self._voice_lane_forced = False
 
     # ----------------------------------------------------------- lifecycle
     def start(self) -> None:
@@ -126,6 +142,15 @@ class Worker:
     def notify(self) -> None:
         """Wake the worker (call after enqueue/cancel)."""
         self._wakeup.set()
+
+    def set_voice_lane_active(self, active: bool) -> None:
+        self._voice_lane_forced = active
+        set_forced_voice_lane(active)
+        self._wakeup.set()
+
+    @property
+    def voice_lane_forced(self) -> bool:
+        return self._voice_lane_forced or forced_voice_lane_active()
 
     @property
     def running_job_id(self) -> str | None:
@@ -166,11 +191,20 @@ class Worker:
                 job.status = JobStatus.QUEUED
                 job.progress = 0.0
 
+    async def _requeue(self, snap: JobSnapshot) -> None:
+        async with session_scope() as s:
+            job = await s.get(Job, snap.id)
+            if job and job.status == JobStatus.RUNNING:
+                job.status = JobStatus.QUEUED
+                job.progress = 0.0
+                job.started_at = None
+
     # --------------------------------------------------- phase-batch select
     async def _pick_next(self) -> JobSnapshot | None:
         from ..api import voice  # noqa: PLC0415
+        from ..services.voice_engine import realtime  # noqa: PLC0415
 
-        if await voice.voice_lane_active():
+        if self.voice_lane_forced or realtime.session_active() or await voice.voice_lane_active():
             if not self._voice_parked:
                 self._voice_parked = True
                 await self._bus.publish(Event(
@@ -218,6 +252,10 @@ class Worker:
         self._cancel_current = False
         backend = None
         failed = False
+        if self.voice_lane_forced:
+            await self._requeue(snap)
+            self._current_job_id = None
+            return
         await self._bus.publish(Event(EventType.JOB_STARTED, job_id=snap.id, job_type=snap.type.value))
         try:
             backend = self._registry.get_backend(snap.model_id)

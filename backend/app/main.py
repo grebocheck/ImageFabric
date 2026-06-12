@@ -38,10 +38,16 @@ from .config import settings
 from .core.arbiter import GpuArbiter
 from .core.enums import EventType
 from .core.events import Event, EventBus
-from .core.scheduler import Worker
+from .core.scheduler import Worker, set_forced_voice_lane
 from .db.session import init_db
 from .services.embedding_service import embedding_service
 from .util import security, sysmon
+from .util.logging import (
+    EventLogSubscriber,
+    configure_file_logging,
+    install_unhandled_exception_logging,
+)
+from .util.pidfiles import reap_known_pidfiles
 
 logger = logging.getLogger("hfabric")
 
@@ -70,13 +76,22 @@ async def _prime_learned_profiles() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings.ensure_dirs()
+    configure_file_logging(settings)
+    install_unhandled_exception_logging(logger, asyncio.get_running_loop())
+    reap_known_pidfiles(logger)
     await init_db()
     security.log_startup_posture(logger)
     await _prime_learned_profiles()
+    voice.set_native_voice_lane_active(False)
+    set_forced_voice_lane(False)
+    app.state.voice_lane_active = False
 
     registry = ModelRegistry()
     registry.scan()
     bus = EventBus()
+    event_logger = EventLogSubscriber(bus, logger, settings)
+    await event_logger.start()
     arbiter = GpuArbiter(bus)
     worker = Worker(bus, arbiter, registry)
 
@@ -92,8 +107,12 @@ async def lifespan(app: FastAPI):
     finally:
         mem_task.cancel()
         await embedding_service.stop()
+        voice.set_native_voice_lane_active(False)
+        set_forced_voice_lane(False)
+        app.state.voice_lane_active = False
         voice.stop_server()
         await worker.stop()
+        await event_logger.stop()
 
 
 app = FastAPI(title="HFabric", version="0.1.0", lifespan=lifespan)

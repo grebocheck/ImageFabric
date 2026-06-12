@@ -15,6 +15,9 @@ from pathlib import Path
 import struct
 import tempfile
 
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
 _TMP = Path(tempfile.gettempdir()) / "hfabric_test"
 _IMAGE_DIR = _TMP / "image"
 _LLM_DIR = _TMP / "llm"
@@ -56,3 +59,41 @@ os.environ["HFAB_IMAGE_MODELS_DIR"] = str(_IMAGE_DIR)
 os.environ["HFAB_LLM_MODELS_DIR"] = str(_LLM_DIR)
 # Keep the budget guard deterministic regardless of the host's free RAM.
 os.environ.setdefault("HFAB_LEARN_MEMORY_PROFILES", "false")
+
+
+@pytest.fixture
+async def isolated_runtime(monkeypatch, tmp_path):
+    """Point global settings + DB session helpers at a per-test runtime tree."""
+    from app.config import settings
+    from app.db import session as db_session
+
+    data_dir = tmp_path / "data"
+    monkeypatch.setattr(settings, "data_dir", data_dir)
+    monkeypatch.setattr(settings, "outputs_dir", data_dir / "outputs")
+    monkeypatch.setattr(settings, "logs_dir", data_dir / "logs")
+    monkeypatch.setattr(settings, "runtime_dir", data_dir / "runtime")
+    monkeypatch.setattr(settings, "backups_dir", data_dir / "backups")
+    monkeypatch.setattr(settings, "db_path", data_dir / "hfabric.db")
+
+    old_engine = db_session.engine
+    old_session_local = db_session.SessionLocal
+    new_engine = create_async_engine(settings.db_url, future=True)
+    db_session.engine = new_engine
+    db_session.SessionLocal = async_sessionmaker(
+        new_engine,
+        expire_on_commit=False,
+        class_=AsyncSession,
+    )
+    try:
+        yield {
+            "data_dir": data_dir,
+            "db_path": settings.db_path,
+            "outputs_dir": settings.outputs_dir,
+            "logs_dir": settings.logs_dir,
+            "runtime_dir": settings.runtime_dir,
+            "backups_dir": settings.backups_dir,
+        }
+    finally:
+        await new_engine.dispose()
+        db_session.engine = old_engine
+        db_session.SessionLocal = old_session_local

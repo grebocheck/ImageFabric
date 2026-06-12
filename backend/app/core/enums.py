@@ -58,3 +58,7 @@ class EventType(str, Enum):
 
     # produced artifact
     IMAGE_READY = "image.ready"
+
+    # realtime voice lifecycle
+    VOICE_SESSION_STARTED = "voice.session.started"
+    VOICE_SESSION_STOPPED = "voice.session.stopped"

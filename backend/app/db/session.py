@@ -4,38 +4,49 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
+    AsyncConnection,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
 
 from ..config import settings
-from .models import Base
 
 engine = create_async_engine(settings.db_url, future=True)
 SessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+_ALEMBIC_INI = _BACKEND_DIR / "alembic.ini"
+
+
+def _alembic_config():
+    from alembic.config import Config  # noqa: PLC0415
+
+    cfg = Config(str(_ALEMBIC_INI))
+    cfg.set_main_option("script_location", str(_BACKEND_DIR / "migrations"))
+    cfg.set_main_option("sqlalchemy.url", settings.db_url)
+    return cfg
+
+
+def _upgrade_head(connection) -> None:
+    from alembic import command  # noqa: PLC0415
+
+    cfg = _alembic_config()
+    cfg.attributes["connection"] = connection
+    command.upgrade(cfg, "head")
 
 
 async def init_db() -> None:
     settings.ensure_dirs()
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        await _ensure_image_columns(conn)
+        await run_migrations(conn)
 
 
-async def _ensure_image_columns(conn) -> None:
-    """Tiny SQLite migration for columns added after the original create_all."""
-    rows = (await conn.execute(text("PRAGMA table_info(images)"))).all()
-    columns = {row[1] for row in rows}
-    if "family" not in columns:
-        await conn.execute(text("ALTER TABLE images ADD COLUMN family TEXT"))
-    if "favorite" not in columns:
-        await conn.execute(text("ALTER TABLE images ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0"))
-    if "tags" not in columns:
-        await conn.execute(text("ALTER TABLE images ADD COLUMN tags JSON NOT NULL DEFAULT '[]'"))
+async def run_migrations(conn: AsyncConnection) -> None:
+    await conn.run_sync(_upgrade_head)
 
 
 @asynccontextmanager

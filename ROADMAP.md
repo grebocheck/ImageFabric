@@ -161,26 +161,37 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
 > logged to disk, and there is no backup story. Each is cheap now and expensive
 > after the tenth table / first lost database.
 
-- [ ] **P15.1 — Real migrations.** Introduce Alembic (async SQLite) with the
+- [x] **P15.1 — Real migrations.** Introduce Alembic (async SQLite) with the
   current schema as revision 0; fold the `_ensure_image_columns` logic into a
   proper revision and delete it. `init_db()` runs `upgrade head` at startup.
   Document "how to add a column" in the README dev section. Test: fresh DB and
   a pre-migration DB both come up.
-- [ ] **P15.2 — Structured file logging.** Rotating file handler under
+  - Done: `backend/alembic.ini` + `backend/migrations/`; startup runs Alembic
+    through the async engine, and legacy image rows missing `family` /
+    `favorite` / `tags` are covered by a raw-SQL upgrade test.
+- [x] **P15.2 — Structured file logging.** Rotating file handler under
   `data/logs/` (size-capped, ~5×10 MB): startup config summary, every arbiter
   note (swap / refusal / warm-evict with the numbers), job start/done/error with
   duration, llama-server stderr tail on failure, unhandled exceptions. Plain
   `logging` is fine; the point is post-mortem debuggability (the "it hung
   overnight" case), not an ELK stack.
-- [ ] **P15.3 — Backup & restore story.** A `scripts/backup.py` (or `.ps1`) that
+  - Done: one event-bus subscriber in lifespan writes `data/logs/hfabric.log`
+    through a 10 MB × 5 rotating handler; stub integration asserts startup and
+    job lifecycle lines.
+- [x] **P15.3 — Backup & restore story.** A `scripts/backup.py` (or `.ps1`) that
   snapshots `data/hfabric.db` (using the SQLite backup API, not file-copy of a
   live WAL DB) plus a manifest of `outputs/`; README section on what to back up
   and how to restore. Optional: a retention-N rotation.
-- [ ] **P15.4 — Orphan-process audit.** If the backend dies hard, can
+  - Done: `scripts/backup.py` snapshots the DB, writes an output manifest, and
+    applies `--keep N` retention; README has restore order.
+- [x] **P15.4 — Orphan-process audit.** If the backend dies hard, can
   `llama-server` / `MMVCServerSIO` outlive it and hold VRAM? Track child PIDs in
   a pidfile and reap stale ones on startup (with a log line), mirroring the
   existing orphan-job requeue. Test with a simulated kill in stub mode where
   possible.
+  - Done: `data/runtime/llama-server.pid` and `wokada.pid` are written/removed
+    around managed subprocesses; startup reaps matching stale processes and tests
+    cover dead and wrong-name pidfiles.
 
 ### P16 — Test depth & quality gates (NEW — audit W4; absorbs P11.2 tail)
 
