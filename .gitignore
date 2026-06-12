@@ -58,3 +58,5 @@ Thumbs.db
 *.log
 .env
 .env.local
+.coverage
+coverage.txt
