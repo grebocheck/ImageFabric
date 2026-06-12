@@ -126,6 +126,10 @@ if ($Stub) {
     Write-Host "[mode] REAL - real models on the GPU (use -Stub for no-GPU mode)" -ForegroundColor Green
 }
 
+# .env can opt into one-port serving permanently (HFAB_SERVE_FRONTEND=true):
+# then a plain double-click behaves exactly like -Prod, so the UI lives on the
+# same host:port the .env advertises instead of a localhost-only Vite :5173.
+if (-not $Prod -and (Test-Truthy $env:HFAB_SERVE_FRONTEND)) { $Prod = $true }
 if ($Prod) {
     $env:HFAB_SERVE_FRONTEND = "true"
     Write-Host "[mode] PROD - FastAPI serves frontend/dist on one port" -ForegroundColor Cyan
