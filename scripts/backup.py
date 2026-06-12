@@ -59,8 +59,17 @@ def create_backup(
     out_dir: Path = DEFAULT_OUT_DIR,
 ) -> Path:
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S-%f")
-    backup_dir = out_dir / f"{BACKUP_PREFIX}{stamp}"
-    backup_dir.mkdir(parents=True, exist_ok=False)
+    base_name = f"{BACKUP_PREFIX}{stamp}"
+    for suffix in range(100):
+        name = base_name if suffix == 0 else f"{base_name}-{suffix:02d}"
+        backup_dir = out_dir / name
+        try:
+            backup_dir.mkdir(parents=True, exist_ok=False)
+            break
+        except FileExistsError:
+            continue
+    else:
+        raise FileExistsError(f"could not create a unique backup directory for {base_name}")
     try:
         snapshot_db(db_path, backup_dir / "hfabric.db")
         write_manifest(outputs_dir, backup_dir / "outputs-manifest.json")

@@ -11,15 +11,10 @@ import psutil
 from ..config import settings
 
 LLAMA_SERVER_PID = "llama-server.pid"
-WOKADA_PID = "wokada.pid"
 
 
 def llama_server_pidfile() -> Path:
     return settings.runtime_dir / LLAMA_SERVER_PID
-
-
-def wokada_pidfile() -> Path:
-    return settings.runtime_dir / WOKADA_PID
 
 
 def write_pidfile(path: Path, pid: int) -> None:
@@ -69,7 +64,6 @@ def reap_pidfile(path: Path, expected_name: str, logger: logging.Logger) -> bool
 
 def reap_known_pidfiles(logger: logging.Logger) -> None:
     reap_pidfile(llama_server_pidfile(), "llama-server", logger)
-    reap_pidfile(wokada_pidfile(), "MMVCServerSIO", logger)
 
 
 def _terminate(proc: psutil.Process, timeout: float = 5.0) -> None:

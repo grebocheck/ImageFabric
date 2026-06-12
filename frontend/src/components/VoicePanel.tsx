@@ -34,8 +34,8 @@ import {
 import type { VoiceEngineAsset, VoiceEngineConvertResult, VoiceEngineSettingsUpdate, VoiceEngineStatus } from "../types";
 
 const field = "w-full rounded-md border border-white/10 bg-black/30 px-2.5 py-1.5 text-sm outline-none focus:border-accent";
-const assetSearchHint = "Searched models/voice/pretrain first, then D:\\MMVCServerSIO\\pretrain.";
-const modelDirHint = "models/voice plus D:\\MMVCServerSIO\\model_dir fallback";
+const assetSearchHint = "Place content_vec_500.onnx and rmvpe.pt in models/voice/pretrain.";
+const modelDirHint = "models/voice";
 
 const nativeF0Options = f0Options.map((option) => (
   option.value === "rmvpe"

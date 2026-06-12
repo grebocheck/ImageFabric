@@ -6,7 +6,7 @@ from httpx import ASGITransport, AsyncClient
 from PIL import Image as PILImage
 import pytest
 
-from app.api import transcription, voice
+from app.api import transcription
 from app.config import settings
 from app.main import app
 
@@ -74,19 +74,3 @@ async def test_vision_upload_cap_runs_before_subprocess(client, monkeypatch, tmp
 
     assert response.status_code == 413
 
-
-async def test_wokada_voice_convert_enforces_upload_cap(client, monkeypatch):
-    async def reachable() -> bool:
-        return True
-
-    monkeypatch.setattr(settings, "voice_max_upload_mb", 0)
-    monkeypatch.setattr(voice, "_models", lambda: [{"id": "slot"}])
-    monkeypatch.setattr(voice, "_server_reachable", reachable)
-
-    response = await client.post(
-        "/api/voice/convert",
-        data={"model_id": "slot"},
-        files={"file": ("voice.wav", b"x", "audio/wav")},
-    )
-
-    assert response.status_code == 413

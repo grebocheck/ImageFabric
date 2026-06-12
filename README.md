@@ -457,6 +457,12 @@ pair, then calls `bin/llama/llama-mtmd-cli.exe` for PNG/JPEG analysis. It
 defaults to `HFAB_VISION_GPU_LAYERS=0`, and stores JSON result sidecars under
 `data/outputs/<date>/`.
 
+The Voice tab uses HFabric's native in-process RVC engine. Pretrain assets live
+under `models/voice/pretrain` and voice slots live under `models/voice`; the UI
+calls `/api/voice/engine/*` for status, settings, offline conversion, and live
+sessions. A live session frees the current arbiter resident and parks queued
+image/LLM jobs until the session stops.
+
 ### RAG workspace
 
 The RAG tab scans `models/embed` for local GGUF embedding models and starts a

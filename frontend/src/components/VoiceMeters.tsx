@@ -1,5 +1,5 @@
-import type { VoiceEngineStatus, VoiceStatus } from "../types";
-import { formatMs, meter, timingLabels, waveformSlots } from "./voiceHelpers";
+import type { VoiceEngineStatus } from "../types";
+import { formatMs, meter, waveformSlots } from "./voiceHelpers";
 
 export type MeterSample = {
   input: number;
@@ -59,16 +59,10 @@ export function WaveformMonitor({ samples }: { samples: MeterSample[] }) {
   );
 }
 
-type VoiceMetrics = VoiceStatus["metrics"] | VoiceEngineStatus["metrics"];
+type VoiceMetrics = VoiceEngineStatus["metrics"];
 
 function timingEntries(metrics?: VoiceMetrics): { label: string; value: number }[] {
   const raw = metrics?.timings_ms;
-  if (Array.isArray(raw)) {
-    return raw
-      .filter((value) => Number.isFinite(value))
-      .slice(0, 6)
-      .map((value, index) => ({ label: timingLabels[index] ?? `stage ${index + 1}`, value }));
-  }
   return Object.entries(raw ?? {})
     .filter(([, value]) => Number.isFinite(value))
     .slice(0, 6)
@@ -80,8 +74,8 @@ export function PerformanceBreakdown({ metrics }: { metrics?: VoiceMetrics }) {
   const total = metrics?.total_ms ?? null;
   const chunk = metrics?.chunk_ms ?? null;
   const max = Math.max(1, Number(total ?? 0), Number(chunk ?? 0), ...timings.map((entry) => entry.value));
-  const overruns = "overruns" in (metrics ?? {}) ? Number((metrics as VoiceEngineStatus["metrics"]).overruns ?? 0) : 0;
-  const underruns = "underruns" in (metrics ?? {}) ? Number((metrics as VoiceEngineStatus["metrics"]).underruns ?? 0) : 0;
+  const overruns = Number(metrics?.overruns ?? 0);
+  const underruns = Number(metrics?.underruns ?? 0);
 
   return (
     <div className="rounded-md border border-white/10 bg-black/20 px-3 py-2">

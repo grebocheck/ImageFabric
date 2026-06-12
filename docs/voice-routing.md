@@ -1,28 +1,30 @@
 # Voice Routing
 
-HFabric wraps w-okada / MMVCServerSIO for realtime voice conversion. w-okada owns
-the audio stream; HFabric selects its devices and starts/stops the stream.
+HFabric uses its native in-process RVC engine for realtime voice conversion.
+The Voice tab selects sounddevice input/output devices, applies native engine
+settings, and starts or stops the live session through `/api/voice/engine/*`.
 
-## Windows output setup
+## Windows Output Setup
 
 To use the converted voice in Discord, OBS, games, or meeting apps:
 
 1. Install a virtual audio cable such as VB-CABLE, or use VoiceMeeter if you need
    more routing.
-2. In the HFabric Voice tab, start the w-okada server.
-3. Set `Input` to your physical microphone.
-4. Set `Output` to the virtual cable input device.
-5. In the target app, set the microphone to the matching virtual cable output.
-6. Use `Monitor` only when you want to hear the converted voice locally.
+2. In the HFabric Voice tab, set `Input` to your physical microphone.
+3. Set `Output` to the virtual cable input device.
+4. In the target app, set the microphone to the matching virtual cable output.
+5. Use `Monitor` only when you want to hear the converted voice locally.
+6. Turn on live mode in the Voice tab.
 
 Keep monitoring off when routing into apps unless you specifically need it;
 otherwise you may hear doubled audio.
 
 ## Notes
 
-- `Sample rate`, `Chunk`, and gains are sent to w-okada through its
-  `/update_settings` API.
-- Live voice uses the GPU outside HFabric's worker. While it is active, queued
-  image and LLM jobs wait instead of competing for VRAM.
-- If audio does not start, open the w-okada UI once and confirm the same devices
-  work there; HFabric is driving the same server settings.
+- Required pretrain assets live under `models/voice/pretrain`.
+- RVC voice slots live under `models/voice`.
+- `Sample rate`, `Chunk`, crossfade, buffer, device, and gain settings are sent
+  to the native voice engine.
+- A live voice session owns the GPU while it is active. The arbiter frees any
+  resident model before the session starts, and queued image/LLM jobs stay parked
+  until the session stops.

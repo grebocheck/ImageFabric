@@ -464,61 +464,6 @@ export interface VoiceAudioDevice {
   default_sample_rate: number | null;
 }
 
-export interface VoiceStatus {
-  engine: string;
-  wokada_dir: string;
-  wokada_installed: boolean;
-  executable: string | null;
-  stored_setting: string;
-  model_dir: string;
-  server_url: string;
-  server_reachable: boolean;
-  server_running: boolean;
-  server_audio_enabled: boolean;
-  server_audio_started: boolean;
-  selected_model_slot: string | null;
-  models: VoiceModel[];
-  audio_devices: {
-    inputs: VoiceAudioDevice[];
-    outputs: VoiceAudioDevice[];
-  };
-  device: string;
-  settings: Record<string, unknown>;
-  performance: Record<string, unknown> | null;
-  metrics: {
-    volume: number;
-    input_vu: number;
-    output_vu: number;
-    timings_ms: number[];
-    total_ms: number | null;
-    chunk_ms: number | null;
-    raw: unknown;
-  };
-  voice_lane_active: boolean;
-  ready: boolean;
-  realtime: boolean;
-}
-
-export interface VoiceSettingsUpdate {
-  model_id?: string | null;
-  pitch?: number | null;
-  formant_shift?: number | null;
-  index_ratio?: number | null;
-  protect?: number | null;
-  f0_detector?: string | null;
-  pass_through?: boolean | null;
-  server_input_device_id?: number | null;
-  server_output_device_id?: number | null;
-  server_monitor_device_id?: number | null;
-  server_audio_sample_rate?: number | null;
-  server_read_chunk_size?: number | null;
-  cross_fade_overlap_size?: number | null;
-  extra_convert_size?: number | null;
-  server_input_gain?: number | null;
-  server_output_gain?: number | null;
-  server_monitor_gain?: number | null;
-}
-
 export interface VoiceEngineAsset {
   name: string;
   path: string | null;

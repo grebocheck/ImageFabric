@@ -1,4 +1,4 @@
-"""Native RVC voice engine API (parallel to the w-okada fallback router)."""
+"""Native RVC voice engine API."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import tempfile
 from typing import Any
 import wave
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -21,7 +21,6 @@ from ..services.voice_engine import assets as asset_discovery
 from ..services.voice_engine import devices, realtime, storage
 from ..services.voice_engine.engine import get_engine
 from ..util import uploads as uploads_util
-from ..util import voice_lane
 from .deps import get_arbiter, get_bus, get_worker
 
 router = APIRouter(prefix="/api/voice/engine", tags=["voice-engine"])
@@ -187,7 +186,6 @@ async def voice_engine_convert(
 @router.post("/session/start")
 async def voice_engine_session_start(
     body: VoiceSessionStart,
-    request: Request,
     arbiter: GpuArbiter = Depends(get_arbiter),
     worker: Worker = Depends(get_worker),
     bus: EventBus = Depends(get_bus),
@@ -212,35 +210,21 @@ async def voice_engine_session_start(
         raise HTTPException(409, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 - surface device/model failures clearly
         raise HTTPException(500, f"could not start the voice session: {exc}") from exc
-    from . import voice as legacy_voice  # noqa: PLC0415
-
-    legacy_voice.set_native_voice_lane_active(True)
-    request.app.state.voice_lane_active = True
-    worker.set_voice_lane_active(True)
     bus.emit(
         EventType.VOICE_SESSION_STARTED,
         engine="native-rvc",
         model_id=body.model_id,
-        worker_voice_lane=worker.voice_lane_forced,
-        app_voice_lane=bool(getattr(request.app.state, "voice_lane_active", False)),
-        runtime_marker=voice_lane.is_active(),
     )
     return _status_payload()
 
 
 @router.post("/session/stop")
 async def voice_engine_session_stop(
-    request: Request,
     worker: Worker = Depends(get_worker),
     bus: EventBus = Depends(get_bus),
 ) -> dict[str, Any]:
     stopped = await asyncio.to_thread(realtime.stop_session)
     if stopped:
-        from . import voice as legacy_voice  # noqa: PLC0415
-
-        legacy_voice.set_native_voice_lane_active(False)
-        request.app.state.voice_lane_active = False
-        worker.set_voice_lane_active(False)
         bus.emit(EventType.VOICE_SESSION_STOPPED, engine="native-rvc")
         worker.notify()
     return _status_payload()

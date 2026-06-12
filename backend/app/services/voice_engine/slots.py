@@ -43,10 +43,9 @@ class VoiceSlot:
         }
 
 
-def _model_roots() -> tuple[tuple[str, Path], tuple[str, Path]]:
+def _model_roots() -> tuple[tuple[str, Path], ...]:
     return (
         ("local", settings.voice_models_dir),
-        ("wokada", settings.voice_wokada_dir / "model_dir"),
     )
 
 
@@ -125,7 +124,7 @@ def _slot_from_dir(slot: Path, source: str, seen: set[str]) -> VoiceSlot | None:
 
 
 def discover_slots(*, include_private: bool = False) -> list[dict[str, Any]]:
-    """Scan local and w-okada model folders for RVC slots.
+    """Scan local model folders for RVC slots.
 
     Discovery looks only at filenames and optional ``params.json``. Checkpoint
     metadata requires torch/safetensors and is read by the loader, not here.

@@ -21,10 +21,9 @@ REQUIRED_ASSETS = (
 )
 
 
-def _candidate_dirs() -> tuple[tuple[str, Path], tuple[str, Path]]:
+def _candidate_dirs() -> tuple[tuple[str, Path], ...]:
     return (
         ("local", settings.voice_pretrain_dir),
-        ("wokada", settings.voice_wokada_dir / "pretrain"),
     )
 
 
@@ -45,9 +44,8 @@ def _find_asset(asset: RequiredAsset) -> dict[str, Any]:
 def discover_assets() -> dict[str, Any]:
     """Return required RVC pretrain assets and an overall readiness flag.
 
-    Search order is the documented HFabric folder first, then the user's
-    existing w-okada install as a local fallback. This function is pure pathlib
-    work and intentionally does not probe file contents.
+    Discovery is pure pathlib work and intentionally does not probe file
+    contents.
     """
     assets = [_find_asset(asset) for asset in REQUIRED_ASSETS]
     return {"ready": all(item["found"] for item in assets), "assets": assets}

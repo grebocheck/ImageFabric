@@ -1,4 +1,4 @@
-import type { ChatConversation, ChatConversationDetail, ChatConversationImport, ChatImportResult, ChatSendBody, ChatSendResult, CodeFile, CodeFileContent, HealthStatus, ImageItem, ImageStats, Job, JobCreate, JobType, LlmConfig, Lora, Model, Note, Preset, PresetImportItem, PresetImportResult, QueuePlan, RagDocument, RagSearchResponse, RagStatus, RuntimeSettings, TranscriptionResult, TranscriptionStatus, TtsGenerateBody, TtsGenerateResult, TtsStatus, VisionResult, VisionStatus, VoiceEngineConvertResult, VoiceEngineSettingsUpdate, VoiceEngineStatus, VoiceSettingsUpdate, VoiceStatus } from "../types";
+import type { ChatConversation, ChatConversationDetail, ChatConversationImport, ChatImportResult, ChatSendBody, ChatSendResult, CodeFile, CodeFileContent, HealthStatus, ImageItem, ImageStats, Job, JobCreate, JobType, LlmConfig, Lora, Model, Note, Preset, PresetImportItem, PresetImportResult, QueuePlan, RagDocument, RagSearchResponse, RagStatus, RuntimeSettings, TranscriptionResult, TranscriptionStatus, TtsGenerateBody, TtsGenerateResult, TtsStatus, VisionResult, VisionStatus, VoiceEngineConvertResult, VoiceEngineSettingsUpdate, VoiceEngineStatus } from "../types";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 const TOKEN_KEY = "hfabric.apiToken";
@@ -256,14 +256,6 @@ export const api = {
       .then(j<RagSearchResponse>),
 
   visionStatus: () => fetch("/api/vision/status").then(j<VisionStatus>),
-  voiceStatus: () => fetch("/api/voice/status").then(j<VoiceStatus>),
-  voiceStartServer: () => fetch("/api/voice/start", { method: "POST" }).then(j<{ running: boolean; already?: boolean; pid?: number }>),
-  voiceStopServer: () => fetch("/api/voice/stop", { method: "POST" }).then(j<{ stopped: boolean }>),
-  voiceApplySettings: (body: VoiceSettingsUpdate) =>
-    fetch("/api/voice/settings", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) }).then(j<VoiceStatus>),
-  voiceStartSession: (body: VoiceSettingsUpdate) =>
-    fetch("/api/voice/session/start", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) }).then(j<VoiceStatus>),
-  voiceStopSession: () => fetch("/api/voice/session/stop", { method: "POST" }).then(j<VoiceStatus>),
   voiceEngineStatus: () => fetch("/api/voice/engine/status").then(j<VoiceEngineStatus>),
   voiceEngineSettings: (body: VoiceEngineSettingsUpdate) =>
     fetch("/api/voice/engine/settings", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) })

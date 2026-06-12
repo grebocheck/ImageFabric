@@ -1,4 +1,4 @@
-import type { VoiceAudioDevice, VoiceEngineSettings, VoiceEngineSettingsUpdate, VoiceModel, VoiceSettingsUpdate } from "../types";
+import type { VoiceAudioDevice, VoiceEngineSettings, VoiceEngineSettingsUpdate, VoiceModel } from "../types";
 
 export const f0Options = [
   { value: "rmvpe_onnx", label: "RMVPE ONNX" },
@@ -60,43 +60,6 @@ export function num(value: unknown, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-export function settingsToVoiceState(settings: Record<string, unknown>): VoiceControlState {
-  const f0 = String(settings.f0Detector ?? "rmvpe_onnx");
-  return {
-    pitch: num(settings.tran, 0),
-    formantShift: num(settings.formantShift, 0),
-    indexRatio: num(settings.indexRatio, 1),
-    protect: num(settings.protect, 0.5),
-    f0Detector: f0Options.some((o) => o.value === f0) ? f0 : "rmvpe_onnx",
-    passThrough: Boolean(settings.passThrough),
-    inputDeviceId: num(settings.serverInputDeviceId, -1),
-    outputDeviceId: num(settings.serverOutputDeviceId, -1),
-    monitorDeviceId: num(settings.serverMonitorDeviceId, -1),
-    sampleRate: num(settings.serverAudioSampleRate, 48000),
-    readChunkSize: num(settings.serverReadChunkSize, 133),
-    crossFadeOverlap: num(settings.crossFadeOverlapSize, 0.05),
-    extraConvert: num(settings.extraConvertSize, 5),
-    inputGain: num(settings.serverInputAudioGain, 1),
-    outputGain: num(settings.serverOutputAudioGain, 1),
-    monitorGain: num(settings.serverMonitorAudioGain, 1),
-  };
-}
-
-export function routingSettingsPatch(state: VoiceRoutingState): VoiceSettingsUpdate {
-  return {
-    server_input_device_id: state.inputDeviceId,
-    server_output_device_id: state.outputDeviceId,
-    server_monitor_device_id: state.monitorDeviceId,
-    server_audio_sample_rate: state.sampleRate,
-    server_read_chunk_size: state.readChunkSize,
-    cross_fade_overlap_size: state.crossFadeOverlap,
-    extra_convert_size: state.extraConvert,
-    server_input_gain: state.inputGain,
-    server_output_gain: state.outputGain,
-    server_monitor_gain: state.monitorGain,
-  };
-}
-
 export function nativeSettingsToVoiceState(settings: Partial<Record<keyof VoiceEngineSettings, unknown>>): VoiceControlState {
   const f0 = String(settings.f0_detector ?? "rmvpe");
   return {
@@ -153,23 +116,10 @@ export function selectedNativeModelId(models: VoiceModel[], current: string, loa
   return models[0]?.id ?? "";
 }
 
-export function selectedModelId(models: VoiceModel[], selectedSlot: string | null): string {
-  return models.find((m) => m.slot === selectedSlot)?.id ?? models[0]?.id ?? "";
-}
-
 export function formatBytes(bytes: number): string {
   if (!bytes) return "0 B";
   const gb = bytes / 1e9;
   return gb >= 1 ? `${gb.toFixed(2)} GB` : `${(bytes / 1e6).toFixed(0)} MB`;
-}
-
-export function perfSummary(performance: Record<string, unknown> | null): string {
-  if (!performance) return "...";
-  const entries = Object.entries(performance)
-    .filter(([, value]) => ["number", "string", "boolean"].includes(typeof value))
-    .slice(0, 3)
-    .map(([key, value]) => `${key}:${String(value)}`);
-  return entries.join(", ") || "available";
 }
 
 export function deviceHint(hostApi: string, rate: number | null): string {

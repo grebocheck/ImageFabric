@@ -29,7 +29,6 @@ from .api import (
     transcription,
     tts,
     vision,
-    voice,
     voice_engine,
     ws,
 )
@@ -38,7 +37,7 @@ from .config import settings
 from .core.arbiter import GpuArbiter
 from .core.enums import EventType
 from .core.events import Event, EventBus
-from .core.scheduler import Worker, set_forced_voice_lane
+from .core.scheduler import Worker
 from .db.session import init_db
 from .services.embedding_service import embedding_service
 from .util import security, sysmon
@@ -83,10 +82,6 @@ async def lifespan(app: FastAPI):
     await init_db()
     security.log_startup_posture(logger)
     await _prime_learned_profiles()
-    voice.set_native_voice_lane_active(False)
-    set_forced_voice_lane(False)
-    app.state.voice_lane_active = False
-
     registry = ModelRegistry()
     registry.scan()
     bus = EventBus()
@@ -107,10 +102,6 @@ async def lifespan(app: FastAPI):
     finally:
         mem_task.cancel()
         await embedding_service.stop()
-        voice.set_native_voice_lane_active(False)
-        set_forced_voice_lane(False)
-        app.state.voice_lane_active = False
-        voice.stop_server()
         await worker.stop()
         await event_logger.stop()
 
@@ -151,7 +142,6 @@ app.include_router(rag.router)
 app.include_router(transcription.router)
 app.include_router(tts.router)
 app.include_router(vision.router)
-app.include_router(voice.router)
 app.include_router(voice_engine.router)
 app.include_router(ws.router)
 

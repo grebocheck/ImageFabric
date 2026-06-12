@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -83,7 +83,6 @@ def _normalize_loras(registry: ModelRegistry, desc: ModelDescriptor, payload: Jo
 @router.post("", response_model=list[JobOut])
 async def create_jobs(
     payloads: list[JobCreate],
-    request: Request,
     session: AsyncSession = Depends(get_session),
     registry: ModelRegistry = Depends(get_registry),
     bus: EventBus = Depends(get_bus),
@@ -101,16 +100,9 @@ async def create_jobs(
     await session.commit()
     for job in created:
         bus.emit(EventType.JOB_CREATED, job_id=job.id, job_type=job.type.value)
-    from ..api import voice  # noqa: PLC0415
     from ..services.voice_engine import realtime  # noqa: PLC0415
 
-    voice_active = (
-        worker.voice_lane_forced
-        or getattr(request.app.state, "voice_lane_active", False)
-        or realtime.session_active()
-        or await voice.voice_lane_active()
-    )
-    if not voice_active:
+    if not realtime.session_active():
         worker.notify()
     return [JobOut.model_validate(j) for j in created]
 

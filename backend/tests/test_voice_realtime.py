@@ -17,7 +17,6 @@ from app.services.voice_engine import realtime
 async def client(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "voice_models_dir", tmp_path / "voice")
     monkeypatch.setattr(settings, "voice_pretrain_dir", tmp_path / "pretrain")
-    monkeypatch.setattr(settings, "voice_wokada_dir", tmp_path / "wokada")
     monkeypatch.setattr(engine_mod, "_ENGINE", None)
     async with app.router.lifespan_context(app):
         transport = ASGITransport(app=app)

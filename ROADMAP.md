@@ -77,17 +77,14 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
 
 ### P6R — Native voice engine (REPLANNED 2026-06-11 — replaces the w-okada wrap)
 
-> **Direction change (user decision):** depending on an external
-> `MMVCServerSIO.exe` is not acceptable — the voice changer gets a **native
+> **Direction change (user decision):** the voice changer is a **native
 > in-process RVC engine** with our own functions and settings, built for
-> correctness and reliability. The pretrained assets it needs already exist
-> locally in `D:\MMVCServerSIO\pretrain` (`content_vec_500.onnx`, `rmvpe.pt` /
-> `rmvpe.onnx`, crepe/fcpe) and the user's voice model is standard RVC v2
-> (`.pth`/`.safetensors` + faiss `.index`) — no downloads required. The w-okada
-> wrapper stays functional as the realtime fallback **until P6R.2/.3 reach
-> parity**, then it is deleted (P6R.4). The 2026-06 Voice-tab UX rework (guided
-> setup flow, monitor mode, auto-apply, `voiceHelpers.ts`) carries over — the
-> page contract was deliberately kept engine-agnostic.
+> correctness and reliability. Pretrained assets live under
+> `models/voice/pretrain` (`content_vec_500.onnx`, `rmvpe.pt`) and the user's
+> voice model is standard RVC v2 under `models/voice/chocola_yagiyukiv2/`
+> (`.pth`/`.safetensors` + faiss `.index`) — no downloads required. The 2026-06
+> Voice-tab UX rework (guided setup flow, monitor mode, auto-apply,
+> `voiceHelpers.ts`) now targets only the native engine.
 >
 > Inference stack: audio → 16 kHz mono (soxr) → ContentVec features
 > (onnxruntime) → optional faiss index mix (`index_ratio`) → RMVPE f0 + pitch
@@ -97,8 +94,7 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
 
 - [x] **P6R.1 — Engine core + offline conversion.** Shipped: the
   `backend/app/services/voice_engine/` package — pretrain-asset discovery
-  (`models/voice/pretrain` first, w-okada `pretrain/` fallback), RVC model
-  discovery (`models/voice` slots + w-okada `model_dir` fallback), the **real**
+  (`models/voice/pretrain`), RVC model discovery (`models/voice` slots), the **real**
   vendored RVC v2 inference network (enc_p / flow / NSF-HiFi-GAN dec / emb_g,
   ~2 400 lines, MIT-attributed) and the **real** RMVPE (E2E0 DeepUnet + BiGRU,
   numpy slaney mel — no librosa dep), ContentVec via onnxruntime, the offline
@@ -122,8 +118,8 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
   size`, `cross_fade_overlap_size`, `extra_convert_size`, `pass_through` —
   settings apply per-chunk without restart); API `session/start` (409 on busy
   GPU, frees the arbiter resident) / `session/stop` / `live`+`metrics` in
-  `/status`; the worker's voice lane now parks GPU jobs for EITHER the native
-  session or the legacy w-okada lane. Stub session + 3 tests incl. an
+  `/status`; the worker's voice lane now parks GPU jobs for the native session.
+  Stub session + 3 tests incl. an
   integration test proving a queued image job parks while live and runs after
   stop (129 backend tests green). Also fixed: the test suite now pins
   `HFAB_API_TOKEN`/`HFAB_HOST` so a developer's real `.env` can't leak 401s
@@ -149,11 +145,13 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
   `frontend/ npm.cmd test`, `backend/ .venv\Scripts\python.exe -m pytest -p
   no:cacheprovider` (workspace temp root), and `backend/ ruff check app tests`
   are green.
-- [ ] **P6R.4 — Live validation + w-okada removal (gates the phase).** With a
-  real mic: confirm conversion + monitor output, measure round-trip latency at
-  2–3 chunk sizes, confirm a queued image job parks during the session and
-  resumes after, write the numbers into this file — then delete the w-okada
-  wrapper code, its settings (`voice_wokada_dir`/`_url`), and the launch path.
+- [~] **P6R.4 — Live validation + legacy voice removal (gates the phase).** Code
+  part done 2026-06-12: deleted the old wrapper router, launch path, settings,
+  pidfile reap hook, discovery fallbacks, frontend legacy client/types/helpers,
+  and collapsed the voice lane to native `realtime.session_active()`. Remaining
+  with a real mic: confirm conversion + monitor output, measure round-trip
+  latency at 2–3 chunk sizes, confirm a queued image job parks during the
+  session and resumes after, then write the numbers into this file.
 
 ### P15 — Reliability & data layer (NEW — audit W3, W7)
 
@@ -185,13 +183,13 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
   - Done: `scripts/backup.py` snapshots the DB, writes an output manifest, and
     applies `--keep N` retention; README has restore order.
 - [x] **P15.4 — Orphan-process audit.** If the backend dies hard, can
-  `llama-server` / `MMVCServerSIO` outlive it and hold VRAM? Track child PIDs in
+  `llama-server` outlive it and hold VRAM? Track child PIDs in
   a pidfile and reap stale ones on startup (with a log line), mirroring the
   existing orphan-job requeue. Test with a simulated kill in stub mode where
   possible.
-  - Done: `data/runtime/llama-server.pid` and `wokada.pid` are written/removed
-    around managed subprocesses; startup reaps matching stale processes and tests
-    cover dead and wrong-name pidfiles.
+  - Done: `data/runtime/llama-server.pid` is written/removed around the managed
+    subprocess; startup reaps matching stale processes and tests cover dead and
+    wrong-name pidfiles.
 
 ### P16 — Test depth & quality gates (NEW — audit W4; absorbs P11.2 tail)
 
@@ -211,7 +209,7 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
   cited answer path with a fake embed server), notes/presets/code (CRUD +
   validation), tts/transcription/vision (request validation + the
   no-model/no-binary error paths — the subprocess itself can be monkeypatched),
-  voice (status/config endpoints with a fake install dir). Target: every router
+  voice (native status/config/session validation paths). Target: every router
   file imported by `main.py` has a test file.
 - [ ] **P16.3 — Frontend lint in CI (P11.2 tail).** eslint (typescript-eslint +
   react-hooks) + prettier, config committed, `npm run lint` wired into
