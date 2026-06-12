@@ -503,14 +503,45 @@ export function VoicePanel() {
               </div>
             ) : null}
 
-            <div className={`rounded-md border px-3 py-2 ${live ? "border-emerald-400/30 bg-emerald-400/10" : "border-white/10 bg-black/20"}`}>
+            <div className={`rounded-md border px-3 py-3 ${live ? "border-emerald-400/30 bg-emerald-400/10" : "border-white/10 bg-black/20"}`}>
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-sm font-medium text-white/80">{live ? "Live voice active" : "Live voice off"}</div>
-                  <div className="mt-0.5 text-xs text-white/35">{ready ? "native engine ready" : "missing assets or voice model"}</div>
+                  <div className="mt-0.5 text-xs text-white/35">
+                    {live
+                      ? `${selected?.name ?? "voice"}: mic -> converted output${monitorOn ? " + monitor" : ""}`
+                      : ready ? "native engine ready" : "missing assets or voice model"}
+                  </div>
                 </div>
-                <Toggle checked={live} onChange={onLive} disabled={!canGoLive && !live} ariaLabel="Toggle live voice" />
               </div>
+              {live ? (
+                <button
+                  onClick={() => onLive(false)}
+                  disabled={Boolean(busy)}
+                  className="mt-3 w-full rounded-md bg-red-600/90 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-red-500 disabled:opacity-40"
+                >
+                  {busy === "live-off" ? "Stopping..." : "Stop live voice"}
+                </button>
+              ) : (
+                <button
+                  onClick={() => onLive(true)}
+                  disabled={!canGoLive}
+                  className="mt-3 w-full rounded-md bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white transition hover:bg-emerald-500 disabled:opacity-40 disabled:hover:bg-emerald-600"
+                >
+                  {busy === "live-on" ? "Starting..." : "Start live voice"}
+                </button>
+              )}
+              {!live && !canGoLive ? (
+                <div className="mt-1.5 text-xs text-amber-200/75">
+                  {busy
+                    ? "busy..."
+                    : !ready
+                      ? "engine not ready: check the assets in step 1"
+                      : !modelId
+                        ? "select a voice in step 2 first"
+                        : "cannot start right now"}
+                </div>
+              ) : null}
             </div>
 
             <div className={`rounded-md border px-3 py-2 ${monitorOn ? "border-sky-400/30 bg-sky-400/10" : "border-white/10 bg-black/20"}`}>
