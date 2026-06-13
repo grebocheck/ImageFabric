@@ -159,6 +159,7 @@ async def test_named_voice_presets_persist_clean_settings(client):
         "/api/voice/engine/presets",
         json={
             "name": "  Clear test  ",
+            "model_id": "voice-a",
             "settings": {
                 "pitch": 12,
                 "index_ratio": 0.25,
@@ -172,6 +173,7 @@ async def test_named_voice_presets_persist_clean_settings(client):
     assert response.status_code == 200
     saved = response.json()
     assert saved["name"] == "Clear test"
+    assert saved["model_id"] == "voice-a"
     assert saved["settings"] == {
         "pitch": 12,
         "index_ratio": 0.25,
@@ -182,6 +184,20 @@ async def test_named_voice_presets_persist_clean_settings(client):
 
     listed = (await client.get("/api/voice/engine/presets")).json()
     assert [item["id"] for item in listed] == [saved["id"]]
+
+    updated_response = await client.patch(
+        f"/api/voice/engine/presets/{saved['id']}",
+        json={
+            "name": "Updated clear",
+            "model_id": "voice-b",
+            "settings": {"pitch": -7, "index_ratio": 0.4, "unknown_future_key": "ignored"},
+        },
+    )
+    assert updated_response.status_code == 200
+    updated = updated_response.json()
+    assert updated["name"] == "Updated clear"
+    assert updated["model_id"] == "voice-b"
+    assert updated["settings"] == {"pitch": -7, "index_ratio": 0.4}
 
     deleted = await client.delete(f"/api/voice/engine/presets/{saved['id']}")
     assert deleted.status_code == 200

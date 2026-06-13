@@ -566,6 +566,7 @@ export interface VoiceEngineSettingsUpdate {
 export interface VoiceEnginePreset {
   id: string;
   name: string;
+  model_id?: string | null;
   settings: VoiceEngineSettingsUpdate;
   created_at: string;
   updated_at: string;

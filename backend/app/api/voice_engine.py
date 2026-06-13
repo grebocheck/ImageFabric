@@ -58,6 +58,13 @@ class VoiceEngineSettingsUpdate(BaseModel):
 class VoiceEnginePresetCreate(BaseModel):
     name: str
     settings: VoiceEngineSettingsUpdate
+    model_id: str | None = None
+
+
+class VoiceEnginePresetUpdate(BaseModel):
+    name: str | None = None
+    settings: VoiceEngineSettingsUpdate | None = None
+    model_id: str | None = None
 
 
 class VoiceSessionStart(BaseModel):
@@ -224,9 +231,28 @@ async def voice_engine_presets() -> list[dict[str, Any]]:
 @router.post("/presets")
 async def voice_engine_preset_create(body: VoiceEnginePresetCreate) -> dict[str, Any]:
     try:
-        preset = presets.create_preset(body.name, body.settings.model_dump(exclude_unset=True))
+        preset = presets.create_preset(body.name, body.settings.model_dump(exclude_unset=True), body.model_id)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    return preset
+
+
+@router.patch("/presets/{preset_id}")
+async def voice_engine_preset_update(preset_id: str, body: VoiceEnginePresetUpdate) -> dict[str, Any]:
+    fields = body.model_fields_set
+    kwargs: dict[str, Any] = {}
+    if "name" in fields:
+        kwargs["name"] = body.name
+    if "settings" in fields:
+        kwargs["preset_settings"] = body.settings.model_dump(exclude_unset=True) if body.settings is not None else {}
+    if "model_id" in fields:
+        kwargs["model_id"] = body.model_id
+    try:
+        preset = presets.update_preset(preset_id, **kwargs)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if preset is None:
+        raise HTTPException(404, "voice preset not found")
     return preset
 
 

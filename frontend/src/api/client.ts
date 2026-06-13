@@ -268,8 +268,11 @@ export const api = {
     fetch("/api/voice/engine/settings", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) })
       .then(j<VoiceEngineStatus>),
   voiceEnginePresets: () => fetch("/api/voice/engine/presets").then(j<VoiceEnginePreset[]>),
-  voiceEnginePresetCreate: (body: { name: string; settings: VoiceEngineSettingsUpdate }) =>
+  voiceEnginePresetCreate: (body: { name: string; settings: VoiceEngineSettingsUpdate; model_id?: string | null }) =>
     fetch("/api/voice/engine/presets", { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(body) })
+      .then(j<VoiceEnginePreset>),
+  voiceEnginePresetUpdate: (id: string, body: { name?: string | null; settings?: VoiceEngineSettingsUpdate | null; model_id?: string | null }) =>
+    fetch(`/api/voice/engine/presets/${id}`, { method: "PATCH", headers: JSON_HEADERS, body: JSON.stringify(body) })
       .then(j<VoiceEnginePreset>),
   voiceEnginePresetDelete: (id: string) =>
     fetch(`/api/voice/engine/presets/${id}`, { method: "DELETE" }).then(j<{ deleted: string }>),
