@@ -19,6 +19,7 @@ export interface Model {
   runtime_mode?: "real" | "stub" | "disabled" | string;
   unavailable_reason?: string | null;
   compatibility_warnings?: string[];
+  recommendation?: "recommended" | "advanced" | "hidden" | "neutral" | string;
 }
 
 export interface WarmModel {

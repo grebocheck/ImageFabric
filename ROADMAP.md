@@ -518,10 +518,15 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
     Considered profiles, disabled features, and source docs sit behind an
     "Advanced details" toggle. Pure status/label helpers are unit-tested
     (`setupDoctorHelpers.test.ts`).
-- [ ] **P20.7 — Model recommendation by hardware.** Tie the model download
+- [~] **P20.7 — Model recommendation by hardware.** Tie the model download
   manager (P18.4) to the capability profile. Users should see curated models
   that fit their VRAM/RAM/disk budget, with "Recommended" preselected and
   impossible models hidden behind an Advanced filter.
+  - Picker slice (ahead of the download manager): `/api/models` now carries a
+    per-model `recommendation` (`recommended`/`advanced`/`hidden`/`neutral`)
+    derived from the capability `model_policy`, and `ModelPicker` badges the
+    models that fit the detected hardware. Full curated download UX still waits
+    on P18.4; this makes the existing chooser hardware-aware in the meantime.
 - [~] **P20.8 — CI and smoke matrix without owning every GPU.** Add fake-probe
   unit tests for NVIDIA/AMD/CPU resolver decisions, plus optional self-hosted or
   manual smoke scripts for real CUDA and ROCm machines. Store every real-machine

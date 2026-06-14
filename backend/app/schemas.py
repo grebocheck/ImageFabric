@@ -31,6 +31,9 @@ class ModelOut(BaseModel):
     runtime_mode: str = "real"
     unavailable_reason: str | None = None
     compatibility_warnings: list[str] = Field(default_factory=list)
+    # Hardware-fit hint from the capability profile's model_policy (P20.3/P20.7):
+    # "recommended" | "advanced" | "hidden" | "neutral".
+    recommendation: str = "neutral"
 
 
 class ModelProfileOut(BaseModel):

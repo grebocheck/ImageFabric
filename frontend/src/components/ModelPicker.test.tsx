@@ -44,6 +44,17 @@ describe("ModelPicker", () => {
     expect(onChange).toHaveBeenCalledWith("sdxl");
   });
 
+  it("badges models recommended for the current hardware", async () => {
+    const user = userEvent.setup();
+    render(<ModelPicker
+      models={[model({ id: "sdxl", name: "SDXL base", family: "sdxl", recommendation: "recommended" })]}
+      value=""
+      onChange={() => {}}
+    />);
+    await user.click(screen.getByRole("button"));
+    expect(screen.getByText("recommended")).toBeTruthy();
+  });
+
   it("renders unavailable models as disabled options", async () => {
     const user = userEvent.setup();
     render(<ModelPicker

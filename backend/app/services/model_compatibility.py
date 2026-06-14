@@ -29,6 +29,7 @@ def compatibility_for_model(
             "runtime_mode": "stub",
             "unavailable_reason": None,
             "compatibility_warnings": ["Runs through the STUB pipeline in this process."],
+            "recommendation": "neutral",
         }
 
     backend = str(profile.get("backend") or "cpu")
@@ -43,6 +44,7 @@ def compatibility_for_model(
                 "runtime_mode": "disabled",
                 "unavailable_reason": unavailable,
                 "compatibility_warnings": warnings,
+                "recommendation": "hidden",
             }
         if backend == "rocm" and desc.family in {
             ModelFamily.FLUX,
@@ -60,7 +62,25 @@ def compatibility_for_model(
         "runtime_mode": "real",
         "unavailable_reason": None,
         "compatibility_warnings": warnings,
+        "recommendation": _recommendation(desc, profile),
     }
+
+
+def _recommendation(desc: ModelDescriptor, profile: dict[str, Any]) -> str:
+    """Hardware-fit hint for an available model: recommended / advanced / neutral.
+
+    Derived from the capability profile's per-family `model_policy` (P20.3). LLMs
+    have no per-family policy yet, so they stay neutral.
+    """
+    if desc.job_type is not JobType.IMAGE:
+        return "neutral"
+    image_policy = ((profile.get("model_policy") or {}).get("image")) or {}
+    family = desc.family.value
+    if family in (image_policy.get("recommended") or []):
+        return "recommended"
+    if family in (image_policy.get("advanced") or []):
+        return "advanced"
+    return "neutral"
 
 
 def require_model_available(desc: ModelDescriptor) -> None:

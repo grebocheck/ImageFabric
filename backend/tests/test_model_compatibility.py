@@ -29,12 +29,14 @@ def profile(
     effective_stub: bool = False,
     disabled: list[str] | None = None,
     vram_mb: int | None = 16384,
+    model_policy: dict | None = None,
 ) -> dict:
     return {
         "backend": backend,
         "effective_stub_mode": effective_stub,
         "disabled_features": disabled or [],
         "primary_gpu": {"vram_mb": vram_mb} if vram_mb else None,
+        "model_policy": model_policy or {},
     }
 
 
@@ -81,6 +83,32 @@ def test_real_mode_blocks_models_that_exceed_gpu_vram():
 
     assert compat["available"] is False
     assert "Estimated VRAM" in compat["unavailable_reason"]
+
+
+def test_recommendation_reflects_model_policy_buckets():
+    policy = {"image": {"recommended": ["sdxl"], "advanced": ["flux"], "hidden": []}}
+    rec = profile(backend="cuda", model_policy=policy)
+
+    sdxl = model_compatibility.compatibility_for_model(
+        desc(ModelFamily.SDXL), profile=rec, estimated_vram_gb=8,
+    )
+    flux = model_compatibility.compatibility_for_model(
+        desc(ModelFamily.FLUX, quant="nunchaku-fp4"), profile=rec, estimated_vram_gb=10,
+    )
+    assert sdxl["recommendation"] == "recommended"
+    assert flux["recommendation"] == "advanced"
+
+
+def test_recommendation_is_neutral_for_llm_and_stub():
+    policy = {"image": {"recommended": ["sdxl"], "advanced": [], "hidden": []}}
+    llm = model_compatibility.compatibility_for_model(
+        desc(ModelFamily.GGUF), profile=profile(backend="cuda", model_policy=policy),
+    )
+    stub = model_compatibility.compatibility_for_model(
+        desc(ModelFamily.SDXL), profile=profile(effective_stub=True, model_policy=policy),
+    )
+    assert llm["recommendation"] == "neutral"
+    assert stub["recommendation"] == "neutral"
 
 
 async def test_create_jobs_rejects_unavailable_model(monkeypatch, app_client):

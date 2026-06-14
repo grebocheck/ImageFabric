@@ -50,6 +50,9 @@ export function ModelPicker({
               <Badge color={familyColor(m.family)}>{m.family}</Badge>
               {m.quant ? <Badge>{m.quant}</Badge> : null}
               {isNunchaku(m) ? <Badge color="bg-emerald-700/55 text-emerald-100">fast</Badge> : null}
+              {m.recommendation === "recommended" ? (
+                <Badge color="bg-emerald-600/45 text-emerald-100">recommended</Badge>
+              ) : null}
               {m.slow ? <Badge color="bg-amber-600/35 text-amber-100">slow</Badge> : null}
               {m.runtime_mode === "stub" ? <Badge color="bg-sky-700/50 text-sky-100">stub</Badge> : null}
               {!isModelAvailable(m) ? <Badge color="bg-red-700/50 text-red-100">disabled</Badge> : null}

@@ -51,6 +51,7 @@ async def list_models(
             runtime_mode=compat["runtime_mode"],
             unavailable_reason=compat["unavailable_reason"],
             compatibility_warnings=compat["compatibility_warnings"],
+            recommendation=compat.get("recommendation", "neutral"),
         ))
     return out
 
