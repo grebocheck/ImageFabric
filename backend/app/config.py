@@ -272,6 +272,11 @@ class Settings(BaseSettings):
     attention_backend: str = "auto"
     attention_allow_tf32: bool = True
     attention_matmul_precision: str = "high"
+    # P20.5: let the detected CapabilityProfile pick the *safe* acceleration
+    # defaults (e.g. math attention + TF32 off on a pre-Ampere/ROCm/CPU box) for
+    # any knob the user did not set explicitly. Only ever tunes toward safety;
+    # never auto-enables torch.compile. Set false to keep the static defaults.
+    capability_autotune: bool = True
     # P1.4: Optional SDXL turbo LoRA. Set to a local .safetensors file, local
     # folder, or Hugging Face repo id to make SDXL default to low-step turbo mode.
     sdxl_turbo_lora: str | None = None

@@ -41,7 +41,7 @@ from .core.enums import EventType
 from .core.events import Event, EventBus
 from .core.scheduler import Worker
 from .db.session import init_db
-from .services import settings_overrides
+from .services import capability_profile, runtime_tuning, settings_overrides
 from .services.embedding_service import embedding_service
 from .util import security, sysmon
 from .util.logging import (
@@ -76,11 +76,34 @@ async def _prime_learned_profiles() -> None:
         pass
 
 
+def _autotune_acceleration(persisted_overrides: set[str]) -> None:
+    """Apply hardware-appropriate acceleration defaults (P20.5).
+
+    Skipped in stub mode (the placeholder pipeline ignores these knobs) and for
+    any knob the user pinned via env or a saved override. Detection failures must
+    never block startup.
+    """
+    if settings.stub_mode or not settings.capability_autotune:
+        return
+    try:
+        user_set = set(settings.model_fields_set) | persisted_overrides
+        profile = capability_profile.get_capability_profile()
+        applied = runtime_tuning.apply_autotune(settings, profile, user_set=user_set)
+        if applied:
+            logger.info(
+                "event=startup.autotune %s",
+                {"backend": profile.get("backend"), "applied": applied},
+            )
+    except Exception:  # noqa: BLE001 - autotune is best-effort, never fatal
+        logger.warning("event=startup.autotune.failed", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings.ensure_dirs()
-    settings_overrides.load()
+    persisted_overrides = settings_overrides.load()
     settings.ensure_dirs()
+    _autotune_acceleration(persisted_overrides)
     configure_file_logging(settings)
     install_unhandled_exception_logging(logger, asyncio.get_running_loop())
     reap_known_pidfiles(logger)

@@ -491,6 +491,19 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
     disabled models, the picker labels them, and `/api/jobs` rejects unavailable
     models server-side. Current guards cover STUB passthrough, nunchaku CUDA
     requirements, ROCm bitsandbytes exclusions, and estimated VRAM over budget.
+  - Autotune slice: `backend/app/services/runtime_tuning.py` applies the detected
+    profile's *safe* acceleration defaults to live settings at startup
+    (`_autotune_acceleration` in `main.py`) for any knob the user did not pin via
+    env or a saved override — `attention_backend` (math below Ampere / non-CUDA),
+    `flux_step_cache` (off without the fp4 fast path), and `attention_allow_tf32`
+    (NVIDIA Ampere+ only). It only ever tunes toward safety, never auto-enables
+    `torch.compile`, is gated off in STUB mode, and never blocks startup. Knob
+    logic is unit-tested (`test_runtime_tuning.py`).
+  - Note on the device string: real image execution currently runs on CUDA and
+    ROCm (PyTorch's ROCm build aliases the `cuda` device, so the existing
+    `image_diffusers.py` `.to("cuda")` path works on AMD/Linux). CPU/Apple and
+    other backends route to STUB. A device abstraction for true MPS/CPU image
+    inference is tracked separately (see P20.9).
 - [~] **P20.6 — User-facing installer UX.** Build a simple "Setup doctor" page:
   detected hardware, selected profile, missing driver/runtime, package status,
   and one action button. Text should be plain: "NVIDIA GPU detected, installing
@@ -523,6 +536,18 @@ Code anchors: `backend/app/core/arbiter.py`, `backend/app/util/sysmon.py`.
     an in-process verify-snippet run; exit code + a paste-ready markdown summary.
     `docs/gpu-smoke.md` gains an installer-profile smoke section and a
     real-machine validation log table (date/GPU/driver/profile/result).
+- [ ] **P20.9 — Device abstraction + Apple Silicon (MPS).** Replace the hard-coded
+  `.to("cuda")` / `torch.cuda.*` calls in `image_diffusers.py` with a single
+  `runtime.device()` / accelerator helper sourced from the CapabilityProfile, so
+  image inference can target `cuda`, `rocm` (already cuda-aliased), `mps`, or a
+  CPU fallback without scattering backend assumptions. Then add an `apple-mps`
+  profile: the probe detects Apple Silicon (Darwin/arm64 + `torch.backends.mps`),
+  the resolver installs the standard PyPI torch wheels, disables all CUDA-only
+  libraries (nunchaku, CUDA llama binaries, TF32), recommends SDXL + llama.cpp
+  Metal, and hides fp4 families. Gate everything conservatively and validate on a
+  real Mac before promoting any model from "advanced" to "recommended". This is
+  the prerequisite for treating non-CUDA accelerators as first-class rather than
+  routing them to STUB.
 
 ### P19 — Generation features (growth — after the foundation phases)
 

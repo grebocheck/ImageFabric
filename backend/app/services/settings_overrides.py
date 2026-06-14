@@ -279,17 +279,20 @@ def payload() -> dict[str, Any]:
     }
 
 
-def load() -> None:
+def load() -> set[str]:
+    """Apply the persisted override file and return the keys it set (if any)."""
     path = overrides_path()
     if not path.exists():
-        return
+        return set()
     raw = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(raw, dict):
         raise ValueError("settings overrides must be a JSON object")
     unknown = sorted(set(raw) - WRITABLE_KEYS)
     if unknown:
         raise ValueError(f"settings overrides contain unsupported keys: {', '.join(unknown)}")
-    _apply(_sanitize(raw))
+    sanitized = _sanitize(raw)
+    _apply(sanitized)
+    return set(sanitized)
 
 
 def save(patch: dict[str, Any]) -> dict[str, Any]:
